@@ -126,72 +126,793 @@ export default {
         );
       }
 
-      if (url.pathname === "/events" && request.method === "POST") {
-        const user = await requireAuth(request, env);
-        const body = await safeJson(request);
+  <!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Family Calendar</title>
 
-        const calendar_id = body?.calendar_id;
-        const title = body?.title?.trim();
-        const location = (body?.location || "").trim() || null;
-        const icon = (body?.icon || "").trim() || null;
-        const start_ts = Number(body?.start_ts);
-        const end_ts = Number(body?.end_ts);
-        const all_day = body?.all_day ? 1 : 0;
-        const rrule = (body?.rrule || "").trim() || null;
+  <!-- Material Design Icons -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css">
 
-        if (!calendar_id) return cors(env, json({ error: "calendar_id required" }, 400));
-        if (!title) return cors(env, json({ error: "title required" }, 400));
-        if (!Number.isFinite(start_ts) || !Number.isFinite(end_ts) || end_ts <= start_ts) {
-          return cors(env, json({ error: "Valid start_ts/end_ts required (epoch ms)" }, 400));
-        }
+  <style>
+    :root{
+      --bg:#0b0f14; --panel:#101826; --panel2:#0f172a;
+      --text:#e5e7eb; --muted:#9ca3af; --line:#22314a; --accent:#60a5fa;
+      --danger:#fb7185;
+    }
+    *{ box-sizing:border-box; }
+    body{
+      margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      background:var(--bg); color:var(--text);
+      min-height:100vh;
+      display:grid;
+      grid-template-columns: 320px 1fr;
+    }
+    aside{
+      border-right:1px solid var(--line);
+      padding:16px;
+      background:linear-gradient(180deg, var(--panel), var(--bg));
+    }
+    main{
+      padding:16px;
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+    }
 
-        if (rrule && !isReasonableRRule(rrule)) {
-          return cors(env, json({ error: "Invalid or unsupported rrule" }, 400));
-        }
+    .topbar{
+      display:flex; align-items:center; justify-content:space-between; gap:12px;
+      padding:12px;
+      background:rgba(16,24,38,.75);
+      border:1px solid var(--line);
+      border-radius:14px;
+    }
+    .title{
+      display:flex; align-items:center; gap:10px;
+      font-weight:800;
+    }
+    .title i{ font-size:20px; color:var(--accent); }
+    .nav{
+      display:flex; align-items:center; gap:8px;
+    }
+    button{
+      cursor:pointer;
+      background:#0b1220;
+      color:var(--text);
+      border:1px solid var(--line);
+      padding:10px 12px;
+      border-radius:12px;
+      font-weight:700;
+    }
+    button:hover{ border-color:#36507c; }
+    .primary{
+      background:var(--accent);
+      color:#07111f;
+      border-color:transparent;
+    }
+    .primary:hover{ filter:brightness(1.05); }
+    .ghost{
+      background:transparent;
+    }
 
-        const id = crypto.randomUUID();
-        const now = Date.now();
+    .card{
+      border:1px solid var(--line);
+      background:rgba(15,23,42,.65);
+      border-radius:14px;
+      padding:12px;
+    }
+    .muted{ color:var(--muted); }
+    .row{ display:flex; gap:10px; align-items:center; }
+    .col{ display:flex; flex-direction:column; gap:10px; }
 
-        await env.DB.prepare(
-          `INSERT INTO events
-           (id, calendar_id, title, location, icon, start_ts, end_ts, all_day, rrule, created_by, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-        )
-          .bind(id, calendar_id, title, location, icon, start_ts, end_ts, all_day, rrule, user.sub, now)
-          .run();
+    /* Calendar grid */
+    .dow{
+      display:grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap:8px;
+      padding:0 2px;
+      color:var(--muted);
+      font-weight:800;
+      letter-spacing:.04em;
+      font-size:12px;
+      text-transform:uppercase;
+    }
+    .grid{
+      display:grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap:8px;
+    }
+    .day{
+      min-height:120px;
+      border:1px solid var(--line);
+      border-radius:14px;
+      background:rgba(16,24,38,.55);
+      padding:10px;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      position:relative;
+      overflow:hidden;
+    }
+    .day.outside{
+      opacity:.55;
+      background:rgba(16,24,38,.25);
+    }
+    .dayNum{
+      display:flex; align-items:center; justify-content:space-between;
+      font-weight:900;
+    }
+    .todayBadge{
+      font-size:11px;
+      padding:4px 8px;
+      border-radius:999px;
+      border:1px solid #2b4166;
+      color:var(--accent);
+      background:rgba(96,165,250,.08);
+    }
+    .events{
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      overflow:auto;
+      padding-right:2px;
+    }
+    .evt{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      padding:7px 8px;
+      border-radius:12px;
+      border:1px solid rgba(255,255,255,.08);
+      background:rgba(2,6,23,.35);
+      font-size:12px;
+      line-height:1.2;
+    }
+    .evt i{ font-size:16px; opacity:.95; }
+    .evt .t{ font-weight:800; }
+    .evt .s{ color:var(--muted); font-weight:700; }
+    .pill{
+      width:10px; height:10px; border-radius:999px; flex:0 0 auto;
+    }
 
-        return cors(
-          env,
-          json({
-            id,
-            calendar_id,
-            title,
-            location,
-            icon,
-            start_ts,
-            end_ts,
-            all_day: !!all_day,
-            rrule,
-            created_at: now,
-          })
-        );
+    /* Sidebar calendars */
+    .calItem{
+      display:flex; align-items:center; justify-content:space-between;
+      gap:10px;
+      padding:10px;
+      border:1px solid rgba(255,255,255,.06);
+      border-radius:14px;
+      background:rgba(2,6,23,.25);
+    }
+    .calLeft{ display:flex; align-items:center; gap:10px; }
+    .swatch{ width:14px; height:14px; border-radius:6px; }
+    .calName{ font-weight:900; }
+    .tiny{ font-size:12px; color:var(--muted); font-weight:700; }
+
+    input, select, textarea{
+      width:100%;
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px solid var(--line);
+      background:#0b1220;
+      color:var(--text);
+      outline:none;
+    }
+    textarea{ min-height:80px; resize:vertical; }
+    label{ font-size:12px; font-weight:900; color:var(--muted); }
+
+    .split{ display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+    .split3{ display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px; }
+
+    /* Modal */
+    .modalWrap{
+      position:fixed; inset:0; display:none;
+      background:rgba(0,0,0,.6);
+      align-items:center; justify-content:center;
+      padding:16px;
+    }
+    .modal{
+      width:min(720px, 100%);
+      border:1px solid var(--line);
+      background:rgba(15,23,42,.92);
+      border-radius:18px;
+      padding:14px;
+      box-shadow: 0 20px 80px rgba(0,0,0,.5);
+    }
+    .modalHeader{
+      display:flex; align-items:center; justify-content:space-between;
+      gap:10px; margin-bottom:10px;
+    }
+    .modalHeader h2{ margin:0; font-size:16px; }
+    .danger{ border-color:rgba(251,113,133,.35); color:#fecdd3; }
+  </style>
+</head>
+<body>
+  <aside>
+    <div class="title" style="margin-bottom:12px;">
+      <i class="mdi mdi-calendar-month"></i>
+      <div>
+        <div style="font-size:16px;">Family Calendar</div>
+        <div class="tiny" id="who"></div>
+      </div>
+    </div>
+
+    <div class="card col">
+      <div class="row" style="justify-content:space-between;">
+        <div style="font-weight:900;">Calendars</div>
+        <button class="ghost" onclick="openCalendarModal()"><i class="mdi mdi-plus"></i></button>
+      </div>
+      <div id="calList" class="col"></div>
+      <div class="tiny">Tip: events inherit calendar color unless you override it.</div>
+    </div>
+
+    <div style="height:12px;"></div>
+
+    <div class="card col">
+      <button class="primary" onclick="openEventModal()">
+        <i class="mdi mdi-plus"></i> New event
+      </button>
+      <button class="danger" onclick="logout()">
+        <i class="mdi mdi-logout"></i> Logout
+      </button>
+      <div class="tiny" id="status"></div>
+    </div>
+  </aside>
+
+  <main>
+    <div class="topbar">
+      <div class="row" style="gap:12px;">
+        <button class="ghost" onclick="goToday()"><i class="mdi mdi-target"></i> Today</button>
+        <div style="font-weight:900; font-size:16px;" id="monthLabel">...</div>
+      </div>
+      <div class="nav">
+        <button onclick="shiftMonth(-1)"><i class="mdi mdi-chevron-left"></i></button>
+        <button onclick="shiftMonth(1)"><i class="mdi mdi-chevron-right"></i></button>
+      </div>
+    </div>
+
+    <div class="dow">
+      <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+    </div>
+
+    <div class="grid" id="grid"></div>
+  </main>
+
+  <!-- Calendar Modal -->
+  <div class="modalWrap" id="calModalWrap" onclick="if(event.target.id==='calModalWrap') closeCalendarModal()">
+    <div class="modal">
+      <div class="modalHeader">
+        <h2>Create Calendar</h2>
+        <button class="ghost" onclick="closeCalendarModal()"><i class="mdi mdi-close"></i></button>
+      </div>
+
+      <div class="split">
+        <div class="col">
+          <label>Name</label>
+          <input id="calName" placeholder="Arianna / Family / School..." />
+        </div>
+        <div class="col">
+          <label>Color</label>
+          <input id="calColor" type="color" value="#60a5fa" />
+        </div>
+      </div>
+
+      <div class="row" style="justify-content:flex-end; margin-top:10px;">
+        <button class="primary" onclick="createCalendar()">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Event Modal -->
+  <div class="modalWrap" id="evtModalWrap" onclick="if(event.target.id==='evtModalWrap') closeEventModal()">
+    <div class="modal">
+      <div class="modalHeader">
+        <h2>New Event</h2>
+        <button class="ghost" onclick="closeEventModal()"><i class="mdi mdi-close"></i></button>
+      </div>
+
+      <div class="split">
+        <div class="col">
+          <label>Calendar</label>
+          <select id="evtCalendar"></select>
+        </div>
+        <div class="col">
+          <label>Icon (MDI class)</label>
+          <input id="evtIcon" placeholder="mdi-stethoscope" value="mdi-calendar" />
+        </div>
+      </div>
+
+      <div class="col" style="margin-top:10px;">
+        <label>Title</label>
+        <input id="evtTitle" placeholder="Arianna Nurse Practitioner Appointment" />
+      </div>
+
+      <div class="col" style="margin-top:10px;">
+        <label>Location</label>
+        <input id="evtLocation" placeholder="100 Perpetual Square" />
+      </div>
+
+      <div class="split" style="margin-top:10px;">
+        <div class="col">
+          <label>Start</label>
+          <input id="evtStart" type="datetime-local" />
+        </div>
+        <div class="col">
+          <label>End</label>
+          <input id="evtEnd" type="datetime-local" />
+        </div>
+      </div>
+
+      <div class="split3" style="margin-top:10px;">
+        <div class="col">
+          <label>All day</label>
+          <select id="evtAllDay">
+            <option value="0">No</option>
+            <option value="1">Yes</option>
+          </select>
+        </div>
+        <div class="col">
+          <label>Override color</label>
+          <input id="evtColor" type="color" value="#000000" />
+          <div class="tiny">Leave black to use calendar color.</div>
+        </div>
+        <div class="col">
+          <label>Recurrence</label>
+          <select id="evtRepeat">
+            <option value="none">None</option>
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="split3" style="margin-top:10px;">
+        <div class="col">
+          <label>Interval</label>
+          <input id="evtInterval" type="number" min="1" value="1" />
+        </div>
+        <div class="col">
+          <label>Until (optional)</label>
+          <input id="evtUntil" type="date" />
+        </div>
+        <div class="col">
+          <label>Count (optional)</label>
+          <input id="evtCount" type="number" min="1" placeholder="e.g. 10" />
+        </div>
+      </div>
+
+      <div class="col" style="margin-top:10px;">
+        <label>Notes</label>
+        <textarea id="evtNotes" placeholder="Anything helpful..."></textarea>
+      </div>
+
+      <div class="row" style="justify-content:flex-end; margin-top:10px;">
+        <!-- FIXED: don't call the ancient DOM createEvent() -->
+        <button class="primary" onclick="saveEvent()">Save Event</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ✅ Set your API base here
+    const API = "https://api.cal.sndjy.us";
+
+    // State
+    let me = null;
+    let calendars = [];
+    let events = []; // raw events from API
+    let viewDate = new Date(); // current month reference
+
+    // ---------- Boot ----------
+    (async function init(){
+      await requireLogin();
+      await loadCalendars();
+      renderCalendarSelect();
+      renderMonth();
+      await loadEventsForVisibleMonth();
+      renderMonth();
+    })();
+
+    async function requireLogin(){
+      const res = await fetch(API + "/auth/me", { credentials: "include" });
+      const data = await res.json();
+      if (!data.logged_in) {
+        location.href = "/login.html";
+        return;
+      }
+      me = data.user;
+      document.getElementById("who").textContent = me.email;
+      setStatus("Logged in.");
+    }
+
+    // ---------- Calendars ----------
+    async function loadCalendars(){
+      const res = await fetch(API + "/calendars", { credentials: "include" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to load calendars");
+      calendars = data.calendars || [];
+      renderCalendarsSidebar();
+    }
+
+    function renderCalendarsSidebar(){
+      const wrap = document.getElementById("calList");
+      wrap.innerHTML = "";
+
+      if (!calendars.length) {
+        const d = document.createElement("div");
+        d.className = "tiny";
+        d.textContent = "No calendars yet. Add one.";
+        wrap.appendChild(d);
+        return;
       }
 
-      if (url.pathname === "/events" && request.method === "DELETE") {
-        const user = await requireAuth(request, env);
-        const body = await safeJson(request);
-        const id = body?.id;
-
-        if (!id) return cors(env, json({ error: "id required" }, 400));
-
-        // Basic safety: only delete events created_by this user (for now)
-        const res = await env.DB.prepare(
-          "DELETE FROM events WHERE id = ? AND created_by = ?"
-        ).bind(id, user.sub).run();
-
-        // D1 returns changes sometimes, but keep it simple
-        return cors(env, json({ ok: true }));
+      for (const c of calendars) {
+        const item = document.createElement("div");
+        item.className = "calItem";
+        item.innerHTML = `
+          <div class="calLeft">
+            <div class="swatch" style="background:${escapeHtml(c.color || "#60a5fa")}"></div>
+            <div>
+              <div class="calName">${escapeHtml(c.name)}</div>
+              <div class="tiny">${new Date(c.created_at).toLocaleString()}</div>
+            </div>
+          </div>
+        `;
+        wrap.appendChild(item);
       }
+    }
+
+    function renderCalendarSelect(){
+      const sel = document.getElementById("evtCalendar");
+      sel.innerHTML = "";
+      for (const c of calendars) {
+        const opt = document.createElement("option");
+        opt.value = c.id;
+        opt.textContent = c.name;
+        sel.appendChild(opt);
+      }
+    }
+
+    function openCalendarModal(){
+      document.getElementById("calModalWrap").style.display = "flex";
+    }
+    function closeCalendarModal(){
+      document.getElementById("calModalWrap").style.display = "none";
+    }
+
+    async function createCalendar(){
+      const name = document.getElementById("calName").value.trim();
+      const color = document.getElementById("calColor").value;
+
+      if (!name) { setStatus("Calendar name required.", true); return; }
+
+      const res = await fetch(API + "/calendars", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ name, color })
+      });
+      const data = await res.json().catch(()=> ({}));
+      if (!res.ok) { setStatus(data.error || "Failed to create calendar", true); return; }
+
+      document.getElementById("calName").value = "";
+      closeCalendarModal();
+      await loadCalendars();
+      renderCalendarSelect();
+      await loadEventsForVisibleMonth();
+      renderMonth();
+      setStatus("Calendar created.");
+    }
+
+    // ---------- Month grid ----------
+    function goToday(){
+      viewDate = new Date();
+      renderMonth();
+      loadEventsForVisibleMonth().then(()=>renderMonth());
+    }
+    function shiftMonth(delta){
+      viewDate = new Date(viewDate.getFullYear(), viewDate.getMonth() + delta, 1);
+      renderMonth();
+      loadEventsForVisibleMonth().then(()=>renderMonth());
+    }
+
+    function renderMonth(){
+      const label = document.getElementById("monthLabel");
+      label.textContent = viewDate.toLocaleString(undefined, { month:"long", year:"numeric" });
+
+      const grid = document.getElementById("grid");
+      grid.innerHTML = "";
+
+      const firstOfMonth = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
+      const startDow = firstOfMonth.getDay();
+      const start = new Date(firstOfMonth);
+      start.setDate(firstOfMonth.getDate() - startDow);
+
+      const today = new Date();
+      const todayKey = keyYMD(today);
+
+      for (let i = 0; i < 42; i++) {
+        const d = new Date(start);
+        d.setDate(start.getDate() + i);
+
+        const outside = d.getMonth() !== viewDate.getMonth();
+        const k = keyYMD(d);
+
+        const cell = document.createElement("div");
+        cell.className = "day" + (outside ? " outside" : "");
+        cell.onclick = (e) => {
+          if (e.target.closest(".evt")) return;
+          openEventModal(d);
+        };
+
+        const head = document.createElement("div");
+        head.className = "dayNum";
+        head.innerHTML = `
+          <div>${d.getDate()}</div>
+          ${k === todayKey ? `<div class="todayBadge">Today</div>` : ``}
+        `;
+
+        const evts = document.createElement("div");
+        evts.className = "events";
+
+        const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0,0,0,0).getTime();
+        const dayEnd   = new Date(d.getFullYear(), d.getMonth(), d.getDate()+1, 0,0,0,0).getTime();
+
+        const occ = expandEventsIntoRange(events, dayStart, dayEnd);
+        const calById = new Map(calendars.map(c => [c.id, c]));
+
+        occ.sort((a,b)=>a.start_ts-b.start_ts).slice(0, 6).forEach(o => {
+          const cal = calById.get(o.calendar_id);
+          const color = (o.color && o.color !== "#000000") ? o.color : (cal?.color || "#60a5fa");
+          const icon = o.icon || "mdi-calendar";
+          const timeLabel = o.all_day ? "All day" : formatTime(o.start_ts);
+
+          const item = document.createElement("div");
+          item.className = "evt";
+          item.title = `${o.title}${o.location ? " @ " + o.location : ""}`;
+          item.innerHTML = `
+            <span class="pill" style="background:${escapeHtml(color)}"></span>
+            <i class="mdi ${escapeHtml(icon)}"></i>
+            <div style="min-width:0;">
+              <div class="t" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(o.title)}</div>
+              <div class="s" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                ${escapeHtml(timeLabel)}${o.location ? " • " + escapeHtml(o.location) : ""}
+              </div>
+            </div>
+          `;
+          evts.appendChild(item);
+        });
+
+        cell.appendChild(head);
+        cell.appendChild(evts);
+        grid.appendChild(cell);
+      }
+    }
+
+    async function loadEventsForVisibleMonth(){
+      const firstOfMonth = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
+      const startDow = firstOfMonth.getDay();
+      const start = new Date(firstOfMonth);
+      start.setDate(firstOfMonth.getDate() - startDow);
+      start.setHours(0,0,0,0);
+
+      const end = new Date(start);
+      end.setDate(start.getDate() + 42);
+      end.setHours(0,0,0,0);
+
+      const qs = new URLSearchParams({
+        start: String(start.getTime()),
+        end: String(end.getTime()),
+      });
+
+      const res = await fetch(API + "/events?" + qs.toString(), { credentials: "include" });
+      const data = await res.json().catch(()=> ({}));
+      if (!res.ok) {
+        setStatus((data.details || data.error || "Failed to load events"), true);
+        events = [];
+        return;
+      }
+      events = data.events || [];
+      setStatus("Events loaded.");
+    }
+
+    // ---------- Events ----------
+    function openEventModal(date = null){
+      if (!calendars.length) {
+        setStatus("Create a calendar first.", true);
+        openCalendarModal();
+        return;
+      }
+
+      const now = new Date();
+      const base = date ? new Date(date) : now;
+
+      const start = new Date(base.getFullYear(), base.getMonth(), base.getDate(), 9, 0, 0, 0);
+      const end = new Date(start.getTime() + 60*60*1000);
+
+      document.getElementById("evtTitle").value = "";
+      document.getElementById("evtLocation").value = "";
+      document.getElementById("evtNotes").value = "";
+      document.getElementById("evtIcon").value = "mdi-calendar";
+      document.getElementById("evtAllDay").value = "0";
+      document.getElementById("evtRepeat").value = "none";
+      document.getElementById("evtInterval").value = "1";
+      document.getElementById("evtUntil").value = "";
+      document.getElementById("evtCount").value = "";
+      document.getElementById("evtColor").value = "#000000";
+
+      document.getElementById("evtStart").value = toLocalInput(start);
+      document.getElementById("evtEnd").value = toLocalInput(end);
+
+      document.getElementById("evtModalWrap").style.display = "flex";
+    }
+    function closeEventModal(){
+      document.getElementById("evtModalWrap").style.display = "none";
+    }
+
+    // ✅ FIX: renamed from createEvent() to saveEvent()
+    async function saveEvent(){
+      const calendar_id = document.getElementById("evtCalendar").value;
+      const title = document.getElementById("evtTitle").value.trim();
+      const location = document.getElementById("evtLocation").value.trim();
+      const notes = document.getElementById("evtNotes").value.trim();
+      const icon = document.getElementById("evtIcon").value.trim();
+      const all_day = document.getElementById("evtAllDay").value === "1";
+      const color = document.getElementById("evtColor").value;
+
+      const start = fromLocalInput(document.getElementById("evtStart").value);
+      const end = fromLocalInput(document.getElementById("evtEnd").value);
+
+      const repeat = document.getElementById("evtRepeat").value;
+      const interval = parseInt(document.getElementById("evtInterval").value || "1", 10);
+      const untilStr = document.getElementById("evtUntil").value;
+      const countStr = document.getElementById("evtCount").value;
+
+      if (!title) { setStatus("Title required.", true); return; }
+      if (!start || !end || end <= start) { setStatus("Start/End invalid.", true); return; }
+
+      let recurrence = null;
+      if (repeat !== "none") {
+        recurrence = {
+          freq: repeat,
+          interval: Number.isFinite(interval) && interval > 0 ? interval : 1,
+          until: untilStr ? new Date(untilStr + "T23:59:59").getTime() : null,
+          count: countStr ? Math.max(1, parseInt(countStr, 10)) : null
+        };
+      }
+
+      const payload = {
+        calendar_id,
+        title,
+        location: location || null,
+        notes: notes || null,
+        icon: icon || null,
+        all_day,
+        start_ts: start,
+        end_ts: end,
+        color: (color && color !== "#000000") ? color : null,
+        recurrence
+      };
+
+      const res = await fetch(API + "/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json().catch(()=> ({}));
+      if (!res.ok) { setStatus(data.error || data.details || "Failed to save event", true); return; }
+
+      closeEventModal();
+      await loadEventsForVisibleMonth();
+      renderMonth();
+      setStatus("Event saved.");
+    }
+
+    function expandEventsIntoRange(raw, rangeStart, rangeEnd){
+      const out = [];
+
+      for (const e of raw) {
+        if (!e.recurrence) {
+          if (e.start_ts < rangeEnd && e.end_ts > rangeStart) out.push(e);
+          continue;
+        }
+
+        let r = null;
+        try { r = typeof e.recurrence === "string" ? JSON.parse(e.recurrence) : e.recurrence; } catch {}
+        if (!r || !r.freq) {
+          if (e.start_ts < rangeEnd && e.end_ts > rangeStart) out.push(e);
+          continue;
+        }
+
+        const freq = r.freq;
+        const interval = (Number(r.interval) > 0) ? Number(r.interval) : 1;
+        const until = Number.isFinite(r.until) ? r.until : null;
+        const count = Number.isFinite(r.count) ? r.count : null;
+
+        let occStart = e.start_ts;
+        let occEnd = e.end_ts;
+        let n = 0;
+        const HARD_CAP = 500;
+
+        while (n < HARD_CAP) {
+          if (occStart >= rangeEnd) break;
+          if (until && occStart > until) break;
+          if (count && n >= count) break;
+
+          if (occStart < rangeEnd && occEnd > rangeStart) {
+            out.push({ ...e, start_ts: occStart, end_ts: occEnd });
+          }
+
+          const s = new Date(occStart);
+          const dur = occEnd - occStart;
+
+          if (freq === "daily") s.setDate(s.getDate() + interval);
+          else if (freq === "weekly") s.setDate(s.getDate() + (7 * interval));
+          else if (freq === "monthly") s.setMonth(s.getMonth() + interval);
+          else break;
+
+          occStart = s.getTime();
+          occEnd = occStart + dur;
+          n++;
+        }
+      }
+
+      return out;
+    }
+
+    // ---------- Logout ----------
+    async function logout(){
+      await fetch(API + "/auth/logout", { method:"POST", credentials:"include" });
+      location.href = "/login.html";
+    }
+
+    // ---------- Helpers ----------
+    function setStatus(msg, bad=false){
+      const el = document.getElementById("status");
+      el.textContent = msg;
+      el.style.color = bad ? "var(--danger)" : "var(--muted)";
+    }
+
+    function toLocalInput(date){
+      const pad = (n)=>String(n).padStart(2,"0");
+      const y = date.getFullYear();
+      const m = pad(date.getMonth()+1);
+      const d = pad(date.getDate());
+      const h = pad(date.getHours());
+      const min = pad(date.getMinutes());
+      return `${y}-${m}-${d}T${h}:${min}`;
+    }
+
+    function fromLocalInput(v){
+      if (!v) return null;
+      const d = new Date(v);
+      return Number.isFinite(d.getTime()) ? d.getTime() : null;
+    }
+
+    function keyYMD(d){
+      const pad = (n)=>String(n).padStart(2,"0");
+      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+    }
+
+    function formatTime(ts){
+      const d = new Date(ts);
+      return d.toLocaleTimeString([], { hour:"numeric", minute:"2-digit" });
+    }
+
+    function escapeHtml(s){
+      return String(s ?? "").replace(/[&<>"']/g, c => ({
+        "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+      }[c]));
+    }
+  </script>
+</body>
+</html>
+
 
       return cors(env, new Response("Not Found", { status: 404 }));
     } catch (err) {
