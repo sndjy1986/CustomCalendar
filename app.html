@@ -5,313 +5,461 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Family Calendar</title>
 
-  <!-- MDI Webfont -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/MaterialDesign-Webfont/7.4.47/css/materialdesignicons.min.css">
+  <!-- Material Design Icons -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css">
 
   <style>
-    body { font-family: Arial, Helvetica, sans-serif; margin:0; background:#111; color:#f5f5f5; }
-    header { display:flex; align-items:center; justify-content:space-between; padding:1rem; border-bottom:1px solid #2a2a2a; background:#141414; }
-    main { padding:1rem; max-width:1100px; margin:0 auto; }
-    .row { display:flex; gap:.75rem; flex-wrap:wrap; margin:1rem 0; align-items:end; }
-    .col { display:flex; flex-direction:column; gap:.25rem; }
-    label { font-size:.85rem; opacity:.8; }
-    input, select, textarea {
-      padding:.7rem; border-radius:10px; border:1px solid #444; background:#0f0f0f; color:#f5f5f5;
+    :root{
+      --bg:#0b0f14; --panel:#101826; --panel2:#0f172a;
+      --text:#e5e7eb; --muted:#9ca3af; --line:#22314a; --accent:#60a5fa;
+      --danger:#fb7185;
     }
-    textarea { min-height: 38px; resize: vertical; }
-    button { padding:.75rem 1rem; border-radius:10px; border:0; cursor:pointer; font-weight:700; }
-    .btn { background:#f5f5f5; color:#111; }
-    .btn2 { background:#2a2a2a; color:#f5f5f5; border:1px solid #444; }
-    .btnDanger { background:#3a1b1b; color:#ffd6d6; border:1px solid #6a2a2a; }
-    .err { color:#ffb4b4; min-height:1.25rem; margin-top:.5rem; }
-    .muted { opacity:.75; }
-    .pill { display:inline-flex; align-items:center; gap:.4rem; padding:.3rem .6rem; border:1px solid #333; border-radius:999px; background:#161616; }
-    .split { display:grid; grid-template-columns: 1fr 1fr; gap:1rem; }
-    @media (max-width: 980px){ .split { grid-template-columns: 1fr; } }
+    *{ box-sizing:border-box; }
+    body{
+      margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      background:var(--bg); color:var(--text);
+      min-height:100vh;
+      display:grid;
+      grid-template-columns: 320px 1fr;
+    }
+    aside{
+      border-right:1px solid var(--line);
+      padding:16px;
+      background:linear-gradient(180deg, var(--panel), var(--bg));
+    }
+    main{
+      padding:16px;
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+    }
 
-    ul { list-style:none; padding:0; margin:0; }
-    .event {
-      padding:.85rem; border:1px solid #333; border-radius:14px; margin:.6rem 0;
-      background:#161616; display:flex; justify-content:space-between; gap:1rem;
+    .topbar{
+      display:flex; align-items:center; justify-content:space-between; gap:12px;
+      padding:12px;
+      background:rgba(16,24,38,.75);
+      border:1px solid var(--line);
+      border-radius:14px;
     }
-    .eventLeft { display:flex; gap:.75rem; align-items:flex-start; }
-    .iconBox {
-      width:36px; height:36px; border-radius:10px; display:grid; place-items:center;
-      border:1px solid #2a2a2a; background:#101010;
-      flex:0 0 auto;
+    .title{
+      display:flex; align-items:center; gap:10px;
+      font-weight:800;
     }
-    .eventTitle { font-weight:800; }
-    .eventMeta { margin-top:.15rem; font-size:.9rem; opacity:.8; line-height:1.35; }
-    .eventMeta .mdi { opacity:.95; }
-    .eventRight { display:flex; gap:.5rem; align-items:center; flex:0 0 auto; }
-    hr { border:0; border-top:1px solid #2a2a2a; margin:1.25rem 0; }
-    .tiny { font-size:.85rem; opacity:.8; }
+    .title i{ font-size:20px; color:var(--accent); }
+    .nav{
+      display:flex; align-items:center; gap:8px;
+    }
+    button{
+      cursor:pointer;
+      background:#0b1220;
+      color:var(--text);
+      border:1px solid var(--line);
+      padding:10px 12px;
+      border-radius:12px;
+      font-weight:700;
+    }
+    button:hover{ border-color:#36507c; }
+    .primary{
+      background:var(--accent);
+      color:#07111f;
+      border-color:transparent;
+    }
+    .primary:hover{ filter:brightness(1.05); }
+    .ghost{
+      background:transparent;
+    }
+
+    .card{
+      border:1px solid var(--line);
+      background:rgba(15,23,42,.65);
+      border-radius:14px;
+      padding:12px;
+    }
+    .muted{ color:var(--muted); }
+    .row{ display:flex; gap:10px; align-items:center; }
+    .col{ display:flex; flex-direction:column; gap:10px; }
+
+    /* Calendar grid */
+    .dow{
+      display:grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap:8px;
+      padding:0 2px;
+      color:var(--muted);
+      font-weight:800;
+      letter-spacing:.04em;
+      font-size:12px;
+      text-transform:uppercase;
+    }
+    .grid{
+      display:grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap:8px;
+    }
+    .day{
+      min-height:120px;
+      border:1px solid var(--line);
+      border-radius:14px;
+      background:rgba(16,24,38,.55);
+      padding:10px;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      position:relative;
+      overflow:hidden;
+    }
+    .day.outside{
+      opacity:.55;
+      background:rgba(16,24,38,.25);
+    }
+    .dayNum{
+      display:flex; align-items:center; justify-content:space-between;
+      font-weight:900;
+    }
+    .todayBadge{
+      font-size:11px;
+      padding:4px 8px;
+      border-radius:999px;
+      border:1px solid #2b4166;
+      color:var(--accent);
+      background:rgba(96,165,250,.08);
+    }
+    .events{
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      overflow:auto;
+      padding-right:2px;
+    }
+    .evt{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      padding:7px 8px;
+      border-radius:12px;
+      border:1px solid rgba(255,255,255,.08);
+      background:rgba(2,6,23,.35);
+      font-size:12px;
+      line-height:1.2;
+    }
+    .evt i{ font-size:16px; opacity:.95; }
+    .evt .t{ font-weight:800; }
+    .evt .s{ color:var(--muted); font-weight:700; }
+    .pill{
+      width:10px; height:10px; border-radius:999px; flex:0 0 auto;
+    }
+
+    /* Sidebar calendars */
+    .calItem{
+      display:flex; align-items:center; justify-content:space-between;
+      gap:10px;
+      padding:10px;
+      border:1px solid rgba(255,255,255,.06);
+      border-radius:14px;
+      background:rgba(2,6,23,.25);
+    }
+    .calLeft{ display:flex; align-items:center; gap:10px; }
+    .swatch{ width:14px; height:14px; border-radius:6px; }
+    .calName{ font-weight:900; }
+    .tiny{ font-size:12px; color:var(--muted); font-weight:700; }
+
+    input, select, textarea{
+      width:100%;
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px solid var(--line);
+      background:#0b1220;
+      color:var(--text);
+      outline:none;
+    }
+    textarea{ min-height:80px; resize:vertical; }
+    label{ font-size:12px; font-weight:900; color:var(--muted); }
+
+    .split{ display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+    .split3{ display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px; }
+
+    /* Modal */
+    .modalWrap{
+      position:fixed; inset:0; display:none;
+      background:rgba(0,0,0,.6);
+      align-items:center; justify-content:center;
+      padding:16px;
+    }
+    .modal{
+      width:min(720px, 100%);
+      border:1px solid var(--line);
+      background:rgba(15,23,42,.92);
+      border-radius:18px;
+      padding:14px;
+      box-shadow: 0 20px 80px rgba(0,0,0,.5);
+    }
+    .modalHeader{
+      display:flex; align-items:center; justify-content:space-between;
+      gap:10px; margin-bottom:10px;
+    }
+    .modalHeader h2{ margin:0; font-size:16px; }
+    .danger{ border-color:rgba(251,113,133,.35); color:#fecdd3; }
   </style>
 </head>
 <body>
-  <header>
-    <div>
-      <strong>Family Calendar</strong>
-      <span class="muted" id="who"></span>
+  <aside>
+    <div class="title" style="margin-bottom:12px;">
+      <i class="mdi mdi-calendar-month"></i>
+      <div>
+        <div style="font-size:16px;">Family Calendar</div>
+        <div class="tiny" id="who"></div>
+      </div>
     </div>
-    <button class="btn2" onclick="logout()">Logout</button>
-  </header>
+
+    <div class="card col">
+      <div class="row" style="justify-content:space-between;">
+        <div style="font-weight:900;">Calendars</div>
+        <button class="ghost" onclick="openCalendarModal()"><i class="mdi mdi-plus"></i></button>
+      </div>
+      <div id="calList" class="col"></div>
+      <div class="tiny">Tip: events inherit calendar color unless you override it.</div>
+    </div>
+
+    <div style="height:12px;"></div>
+
+    <div class="card col">
+      <button class="primary" onclick="openEventModal()">
+        <i class="mdi mdi-plus"></i> New event
+      </button>
+      <button class="danger" onclick="logout()">
+        <i class="mdi mdi-logout"></i> Logout
+      </button>
+      <div class="tiny" id="status"></div>
+    </div>
+  </aside>
 
   <main>
-    <div class="err" id="err"></div>
-
-    <div class="split">
-      <section>
-        <h2>Calendars</h2>
-
-        <div class="row">
-          <div class="col">
-            <label>Calendar</label>
-            <select id="calendarSelect" onchange="onCalendarChange()"></select>
-          </div>
-
-          <div class="col">
-            <label>New calendar name</label>
-            <input id="calName" placeholder="e.g., Arianna, Joey, Brittney" />
-          </div>
-
-          <div class="col">
-            <label>Color</label>
-            <input id="calColor" type="color" value="#00bfff" />
-          </div>
-
-          <button class="btn" onclick="createCalendar()">Create</button>
-        </div>
-
-        <div class="tiny">
-          Tip: events inherit the calendar color so your eyeballs can suffer less.
-        </div>
-      </section>
-
-      <section>
-        <h2>Quick Add</h2>
-        <div class="tiny muted">
-          Example: <span class="pill">2/12 10:30 Arianna Nurse Practitioner Appointment at 100 Perpetual Square</span>
-        </div>
-
-        <div class="row">
-          <div class="col" style="flex:1">
-            <label>Quick add text</label>
-            <input id="quickText" placeholder="MM/DD HH:MM Title at Location" />
-          </div>
-          <button class="btn" onclick="quickAdd()">Add</button>
-        </div>
-
-        <div class="tiny muted">
-          Assumptions: date is in your local timezone, year defaults to current year, duration defaults to 30 minutes unless it sees “- 11:30” style end time.
-        </div>
-      </section>
+    <div class="topbar">
+      <div class="row" style="gap:12px;">
+        <button class="ghost" onclick="goToday()"><i class="mdi mdi-target"></i> Today</button>
+        <div style="font-weight:900; font-size:16px;" id="monthLabel">...</div>
+      </div>
+      <div class="nav">
+        <button onclick="shiftMonth(-1)"><i class="mdi mdi-chevron-left"></i></button>
+        <button onclick="shiftMonth(1)"><i class="mdi mdi-chevron-right"></i></button>
+      </div>
     </div>
 
-    <hr />
+    <div class="dow">
+      <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+    </div>
 
-    <section>
-      <h2>Add Event</h2>
-
-      <div class="row">
-        <div class="col" style="flex: 1">
-          <label>Title</label>
-          <input id="evTitle" placeholder="Nurse Practitioner Appointment" />
-        </div>
-
-        <div class="col" style="min-width: 220px">
-          <label>Location</label>
-          <input id="evLocation" placeholder="100 Perpetual Square" />
-        </div>
-
-        <div class="col" style="min-width: 190px">
-          <label>Icon (MDI class)</label>
-          <input id="evIcon" placeholder="mdi-stethoscope" value="mdi-calendar" />
-        </div>
-      </div>
-
-      <div class="row">
-        <div class="col">
-          <label>Start</label>
-          <input id="evStart" type="datetime-local" />
-        </div>
-
-        <div class="col">
-          <label>End</label>
-          <input id="evEnd" type="datetime-local" />
-        </div>
-
-        <div class="col">
-          <label>All day</label>
-          <select id="evAllDay">
-            <option value="0" selected>No</option>
-            <option value="1">Yes</option>
-          </select>
-        </div>
-      </div>
-
-      <h3>Recurring</h3>
-      <div class="row">
-        <div class="col">
-          <label>Repeat</label>
-          <select id="recEnabled" onchange="toggleRecurrence()">
-            <option value="0" selected>No</option>
-            <option value="1">Yes</option>
-          </select>
-        </div>
-
-        <div class="col">
-          <label>Frequency</label>
-          <select id="recFreq">
-            <option value="DAILY">Daily</option>
-            <option value="WEEKLY" selected>Weekly</option>
-            <option value="MONTHLY">Monthly</option>
-          </select>
-        </div>
-
-        <div class="col">
-          <label>Interval</label>
-          <input id="recInterval" type="number" min="1" value="1" />
-        </div>
-
-        <div class="col">
-          <label>Weekly days</label>
-          <select id="recByday" multiple size="2">
-            <option value="MO">Mon</option>
-            <option value="TU">Tue</option>
-            <option value="WE">Wed</option>
-            <option value="TH">Thu</option>
-            <option value="FR">Fri</option>
-            <option value="SA">Sat</option>
-            <option value="SU">Sun</option>
-          </select>
-        </div>
-
-        <div class="col">
-          <label>Ends</label>
-          <select id="recEndMode">
-            <option value="NEVER" selected>Never</option>
-            <option value="COUNT">After N</option>
-            <option value="UNTIL">On date</option>
-          </select>
-        </div>
-
-        <div class="col">
-          <label>Count / Until</label>
-          <input id="recEndValue" placeholder="10 or 2026-12-31" />
-        </div>
-
-        <div class="col" style="flex:1">
-          <label>RRULE (generated)</label>
-          <input id="recRrule" readonly />
-        </div>
-      </div>
-
-      <div class="row">
-        <button class="btn" onclick="createEvent()">Create Event</button>
-        <span class="tiny muted">MDI examples: <span class="pill"><span class="mdi mdi-stethoscope"></span> mdi-stethoscope</span> <span class="pill"><span class="mdi mdi-school"></span> mdi-school</span> <span class="pill"><span class="mdi mdi-soccer"></span> mdi-soccer</span></span>
-      </div>
-    </section>
-
-    <hr />
-
-    <section>
-      <h2>Upcoming</h2>
-
-      <div class="row">
-        <div class="col">
-          <label>From</label>
-          <input id="rangeFrom" type="date" />
-        </div>
-        <div class="col">
-          <label>To</label>
-          <input id="rangeTo" type="date" />
-        </div>
-        <button class="btn2" onclick="loadEvents()">Refresh</button>
-      </div>
-
-      <ul id="eventsList"></ul>
-    </section>
+    <div class="grid" id="grid"></div>
   </main>
 
+  <!-- Calendar Modal -->
+  <div class="modalWrap" id="calModalWrap" onclick="if(event.target.id==='calModalWrap') closeCalendarModal()">
+    <div class="modal">
+      <div class="modalHeader">
+        <h2>Create Calendar</h2>
+        <button class="ghost" onclick="closeCalendarModal()"><i class="mdi mdi-close"></i></button>
+      </div>
+
+      <div class="split">
+        <div class="col">
+          <label>Name</label>
+          <input id="calName" placeholder="Arianna / Family / School..." />
+        </div>
+        <div class="col">
+          <label>Color</label>
+          <input id="calColor" type="color" value="#60a5fa" />
+        </div>
+      </div>
+
+      <div class="row" style="justify-content:flex-end; margin-top:10px;">
+        <button class="primary" onclick="createCalendar()">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Event Modal -->
+  <div class="modalWrap" id="evtModalWrap" onclick="if(event.target.id==='evtModalWrap') closeEventModal()">
+    <div class="modal">
+      <div class="modalHeader">
+        <h2>New Event</h2>
+        <button class="ghost" onclick="closeEventModal()"><i class="mdi mdi-close"></i></button>
+      </div>
+
+      <div class="split">
+        <div class="col">
+          <label>Calendar</label>
+          <select id="evtCalendar"></select>
+        </div>
+        <div class="col">
+          <label>Icon (MDI class)</label>
+          <input id="evtIcon" placeholder="mdi-stethoscope" value="mdi-calendar" />
+        </div>
+      </div>
+
+      <div class="col" style="margin-top:10px;">
+        <label>Title</label>
+        <input id="evtTitle" placeholder="Arianna Nurse Practitioner Appointment" />
+      </div>
+
+      <div class="col" style="margin-top:10px;">
+        <label>Location</label>
+        <input id="evtLocation" placeholder="100 Perpetual Square" />
+      </div>
+
+      <div class="split" style="margin-top:10px;">
+        <div class="col">
+          <label>Start</label>
+          <input id="evtStart" type="datetime-local" />
+        </div>
+        <div class="col">
+          <label>End</label>
+          <input id="evtEnd" type="datetime-local" />
+        </div>
+      </div>
+
+      <div class="split3" style="margin-top:10px;">
+        <div class="col">
+          <label>All day</label>
+          <select id="evtAllDay">
+            <option value="0">No</option>
+            <option value="1">Yes</option>
+          </select>
+        </div>
+        <div class="col">
+          <label>Override color</label>
+          <input id="evtColor" type="color" value="#000000" />
+          <div class="tiny">Leave black to use calendar color.</div>
+        </div>
+        <div class="col">
+          <label>Recurrence</label>
+          <select id="evtRepeat">
+            <option value="none">None</option>
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="split3" style="margin-top:10px;">
+        <div class="col">
+          <label>Interval</label>
+          <input id="evtInterval" type="number" min="1" value="1" />
+        </div>
+        <div class="col">
+          <label>Until (optional)</label>
+          <input id="evtUntil" type="date" />
+        </div>
+        <div class="col">
+          <label>Count (optional)</label>
+          <input id="evtCount" type="number" min="1" placeholder="e.g. 10" />
+        </div>
+      </div>
+
+      <div class="col" style="margin-top:10px;">
+        <label>Notes</label>
+        <textarea id="evtNotes" placeholder="Anything helpful..."></textarea>
+      </div>
+
+      <div class="row" style="justify-content:flex-end; margin-top:10px;">
+        <button class="primary" onclick="createEvent()">Save Event</button>
+      </div>
+    </div>
+  </div>
+
   <script>
-    // CHANGE THIS:
+    // ✅ Set your API base here
     const API = "https://api.cal.sndjy.us";
 
+    // State
+    let me = null;
     let calendars = [];
-    let selectedCalendar = null;
+    let events = []; // raw events from API
+    let viewDate = new Date(); // current month reference
+    let selectedCalendarId = ""; // optional future filter
 
-    async function init() {
-      try {
-        const meRes = await fetch(API + "/auth/me", { credentials: "include" });
-        if (!meRes.ok) { location.href = "/login.html"; return; }
-        const meData = await meRes.json().catch(() => null);
-        if (!meData || !meData.logged_in) { location.href = "/login.html"; return; }
+    // ---------- Boot ----------
+    (async function init(){
+      await requireLogin();
+      await loadCalendars();
+      renderCalendarSelect();
+      renderMonth();
+      await loadEventsForVisibleMonth();
+      renderMonth(); // re-render with events
+    })();
 
-        document.getElementById("who").textContent = " (" + meData.user.email + ")";
-
-        setDefaultDates();
-        setDefaultTimes();
-        toggleRecurrence();
-
-        await loadCalendars();
-      } catch {
+    async function requireLogin(){
+      const res = await fetch(API + "/auth/me", { credentials: "include" });
+      const data = await res.json();
+      if (!data.logged_in) {
         location.href = "/login.html";
+        return;
+      }
+      me = data.user;
+      document.getElementById("who").textContent = me.email;
+      setStatus("Logged in.");
+    }
+
+    // ---------- Calendars ----------
+    async function loadCalendars(){
+      const res = await fetch(API + "/calendars", { credentials: "include" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to load calendars");
+      calendars = data.calendars || [];
+      renderCalendarsSidebar();
+    }
+
+    function renderCalendarsSidebar(){
+      const wrap = document.getElementById("calList");
+      wrap.innerHTML = "";
+
+      if (!calendars.length) {
+        const d = document.createElement("div");
+        d.className = "tiny";
+        d.textContent = "No calendars yet. Add one.";
+        wrap.appendChild(d);
+        return;
+      }
+
+      for (const c of calendars) {
+        const item = document.createElement("div");
+        item.className = "calItem";
+        item.innerHTML = `
+          <div class="calLeft">
+            <div class="swatch" style="background:${escapeHtml(c.color || "#60a5fa")}"></div>
+            <div>
+              <div class="calName">${escapeHtml(c.name)}</div>
+              <div class="tiny">${new Date(c.created_at).toLocaleString()}</div>
+            </div>
+          </div>
+        `;
+        wrap.appendChild(item);
       }
     }
 
-    function setDefaultDates() {
-      const now = new Date();
-      const from = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const to = new Date(from.getTime() + 14 * 24 * 60 * 60 * 1000);
-      document.getElementById("rangeFrom").value = toDateInput(from);
-      document.getElementById("rangeTo").value = toDateInput(to);
-    }
-
-    function setDefaultTimes() {
-      const now = new Date();
-      const start = new Date(now.getTime() + 60 * 60 * 1000);
-      start.setMinutes(0, 0, 0);
-      const end = new Date(start.getTime() + 30 * 60 * 1000);
-
-      document.getElementById("evStart").value = toDateTimeLocal(start);
-      document.getElementById("evEnd").value = toDateTimeLocal(end);
-    }
-
-    async function loadCalendars() {
-      setErr("");
-      const res = await fetch(API + "/calendars", { credentials: "include" });
-      if (!res.ok) { if (res.status === 401) location.href="/login.html"; return; }
-      const data = await res.json().catch(() => ({}));
-      calendars = data.calendars || [];
-
-      const sel = document.getElementById("calendarSelect");
+    function renderCalendarSelect(){
+      const sel = document.getElementById("evtCalendar");
       sel.innerHTML = "";
-
-      calendars.forEach((c, idx) => {
+      for (const c of calendars) {
         const opt = document.createElement("option");
         opt.value = c.id;
-        opt.textContent = c.name + " (" + c.color + ")";
-        opt.style.color = c.color;
+        opt.textContent = c.name;
         sel.appendChild(opt);
-      });
-
-      selectedCalendar = calendars[0] || null;
-      if (selectedCalendar) sel.value = selectedCalendar.id;
-
-      await loadEvents();
+      }
     }
 
-    function onCalendarChange() {
-      const id = document.getElementById("calendarSelect").value;
-      selectedCalendar = calendars.find(c => c.id === id) || null;
-      loadEvents();
+    function openCalendarModal(){
+      document.getElementById("calModalWrap").style.display = "flex";
+    }
+    function closeCalendarModal(){
+      document.getElementById("calModalWrap").style.display = "none";
     }
 
-    async function createCalendar() {
-      setErr("");
+    async function createCalendar(){
       const name = document.getElementById("calName").value.trim();
       const color = document.getElementById("calColor").value;
+
+      if (!name) { setStatus("Calendar name required.", true); return; }
 
       const res = await fetch(API + "/calendars", {
         method: "POST",
@@ -319,353 +467,338 @@
         credentials: "include",
         body: JSON.stringify({ name, color })
       });
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) { setErr(data.error || "Failed to create calendar"); return; }
+      const data = await res.json().catch(()=> ({}));
+      if (!res.ok) { setStatus(data.error || "Failed to create calendar", true); return; }
 
       document.getElementById("calName").value = "";
+      closeCalendarModal();
       await loadCalendars();
+      renderCalendarSelect();
+      await loadEventsForVisibleMonth();
+      renderMonth();
+      setStatus("Calendar created.");
     }
 
-    function toggleRecurrence() {
-      const enabled = document.getElementById("recEnabled").value === "1";
-      const inputs = ["recFreq","recInterval","recByday","recEndMode","recEndValue"];
-      inputs.forEach(id => document.getElementById(id).disabled = !enabled);
+    // ---------- Month grid ----------
+    function goToday(){
+      viewDate = new Date();
+      renderMonth();
+      loadEventsForVisibleMonth().then(()=>renderMonth());
+    }
+    function shiftMonth(delta){
+      viewDate = new Date(viewDate.getFullYear(), viewDate.getMonth() + delta, 1);
+      renderMonth();
+      loadEventsForVisibleMonth().then(()=>renderMonth());
+    }
 
-      updateRRule();
-      ["recFreq","recInterval","recEndMode","recEndValue","recByday"].forEach(id => {
-        document.getElementById(id).onchange = updateRRule;
-        document.getElementById(id).oninput = updateRRule;
+    function renderMonth(){
+      const label = document.getElementById("monthLabel");
+      label.textContent = viewDate.toLocaleString(undefined, { month:"long", year:"numeric" });
+
+      const grid = document.getElementById("grid");
+      grid.innerHTML = "";
+
+      const firstOfMonth = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
+      const startDow = firstOfMonth.getDay(); // 0=Sun
+      const start = new Date(firstOfMonth);
+      start.setDate(firstOfMonth.getDate() - startDow);
+
+      const today = new Date();
+      const todayKey = keyYMD(today);
+
+      // 6 weeks = 42 cells
+      for (let i = 0; i < 42; i++) {
+        const d = new Date(start);
+        d.setDate(start.getDate() + i);
+
+        const outside = d.getMonth() !== viewDate.getMonth();
+        const k = keyYMD(d);
+
+        const cell = document.createElement("div");
+        cell.className = "day" + (outside ? " outside" : "");
+        cell.onclick = (e) => {
+          // don't open if clicking on an event element
+          if (e.target.closest(".evt")) return;
+          openEventModal(d);
+        };
+
+        const head = document.createElement("div");
+        head.className = "dayNum";
+        head.innerHTML = `
+          <div>${d.getDate()}</div>
+          ${k === todayKey ? `<div class="todayBadge">Today</div>` : ``}
+        `;
+
+        const evts = document.createElement("div");
+        evts.className = "events";
+
+        // Get occurrences for this day
+        const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0,0,0,0).getTime();
+        const dayEnd   = new Date(d.getFullYear(), d.getMonth(), d.getDate()+1, 0,0,0,0).getTime();
+
+        const occ = expandEventsIntoRange(events, dayStart, dayEnd);
+
+        // Render up to 6 per day
+        const calById = new Map(calendars.map(c => [c.id, c]));
+        occ
+          .sort((a,b)=>a.start_ts-b.start_ts)
+          .slice(0, 6)
+          .forEach(o => {
+            const cal = calById.get(o.calendar_id);
+            const color = (o.color && o.color !== "#000000") ? o.color : (cal?.color || "#60a5fa");
+            const icon = o.icon || "mdi-calendar";
+            const timeLabel = o.all_day ? "All day" : formatTime(o.start_ts);
+
+            const item = document.createElement("div");
+            item.className = "evt";
+            item.title = `${o.title}${o.location ? " @ " + o.location : ""}`;
+            item.innerHTML = `
+              <span class="pill" style="background:${escapeHtml(color)}"></span>
+              <i class="mdi ${escapeHtml(icon)}"></i>
+              <div style="min-width:0;">
+                <div class="t" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(o.title)}</div>
+                <div class="s" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                  ${escapeHtml(timeLabel)}${o.location ? " • " + escapeHtml(o.location) : ""}
+                </div>
+              </div>
+            `;
+            evts.appendChild(item);
+          });
+
+        cell.appendChild(head);
+        cell.appendChild(evts);
+        grid.appendChild(cell);
+      }
+    }
+
+    async function loadEventsForVisibleMonth(){
+      // Fetch range from calendar grid start -> end (6 weeks)
+      const firstOfMonth = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
+      const startDow = firstOfMonth.getDay();
+      const start = new Date(firstOfMonth);
+      start.setDate(firstOfMonth.getDate() - startDow);
+      start.setHours(0,0,0,0);
+
+      const end = new Date(start);
+      end.setDate(start.getDate() + 42);
+      end.setHours(0,0,0,0);
+
+      const qs = new URLSearchParams({
+        start: String(start.getTime()),
+        end: String(end.getTime()),
       });
+
+      const res = await fetch(API + "/events?" + qs.toString(), { credentials: "include" });
+      const data = await res.json().catch(()=> ({}));
+      if (!res.ok) {
+        setStatus(data.error || "Failed to load events", true);
+        events = [];
+        return;
+      }
+      events = data.events || [];
+      setStatus("Events loaded.");
     }
 
-    function updateRRule() {
-      const enabled = document.getElementById("recEnabled").value === "1";
-      if (!enabled) {
-        document.getElementById("recRrule").value = "";
+    // ---------- Events ----------
+    function openEventModal(date = null){
+      if (!calendars.length) {
+        setStatus("Create a calendar first.", true);
+        openCalendarModal();
         return;
       }
 
-      const freq = document.getElementById("recFreq").value;
-      const interval = Math.max(1, parseInt(document.getElementById("recInterval").value || "1", 10));
-      const endMode = document.getElementById("recEndMode").value;
-      const endVal = (document.getElementById("recEndValue").value || "").trim();
+      // Default times: if date provided, set start at 09:00 that day
+      const now = new Date();
+      const base = date ? new Date(date) : now;
 
-      let parts = [];
-      parts.push("FREQ=" + freq);
-      parts.push("INTERVAL=" + interval);
+      const start = new Date(base.getFullYear(), base.getMonth(), base.getDate(), 9, 0, 0, 0);
+      const end = new Date(start.getTime() + 60*60*1000);
 
-      if (freq === "WEEKLY") {
-        const bydaySel = Array.from(document.getElementById("recByday").selectedOptions).map(o => o.value);
-        // If user didn't choose any days, we'll leave BYDAY out; server will default to base weekday.
-        if (bydaySel.length) parts.push("BYDAY=" + bydaySel.join(","));
-      }
+      document.getElementById("evtTitle").value = "";
+      document.getElementById("evtLocation").value = "";
+      document.getElementById("evtNotes").value = "";
+      document.getElementById("evtIcon").value = "mdi-calendar";
+      document.getElementById("evtAllDay").value = "0";
+      document.getElementById("evtRepeat").value = "none";
+      document.getElementById("evtInterval").value = "1";
+      document.getElementById("evtUntil").value = "";
+      document.getElementById("evtCount").value = "";
+      document.getElementById("evtColor").value = "#000000";
 
-      if (endMode === "COUNT") {
-        const n = parseInt(endVal, 10);
-        if (Number.isFinite(n) && n > 0) parts.push("COUNT=" + n);
-      }
+      document.getElementById("evtStart").value = toLocalInput(start);
+      document.getElementById("evtEnd").value = toLocalInput(end);
 
-      if (endMode === "UNTIL") {
-        // expect YYYY-MM-DD
-        const m = endVal.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-        if (m) {
-          const y = m[1], mo = m[2], d = m[3];
-          parts.push("UNTIL=" + y + mo + d); // date-only UNTIL
-        }
-      }
-
-      document.getElementById("recRrule").value = parts.join(";");
+      document.getElementById("evtModalWrap").style.display = "flex";
+    }
+    function closeEventModal(){
+      document.getElementById("evtModalWrap").style.display = "none";
     }
 
-    async function createEvent() {
-      setErr("");
-      if (!selectedCalendar) { setErr("Create/select a calendar first"); return; }
+    async function createEvent(){
+      const calendar_id = document.getElementById("evtCalendar").value;
+      const title = document.getElementById("evtTitle").value.trim();
+      const location = document.getElementById("evtLocation").value.trim();
+      const notes = document.getElementById("evtNotes").value.trim();
+      const icon = document.getElementById("evtIcon").value.trim();
+      const all_day = document.getElementById("evtAllDay").value === "1";
+      const color = document.getElementById("evtColor").value;
 
-      const title = document.getElementById("evTitle").value.trim();
-      const location = document.getElementById("evLocation").value.trim();
-      const icon = document.getElementById("evIcon").value.trim();
+      const start = fromLocalInput(document.getElementById("evtStart").value);
+      const end = fromLocalInput(document.getElementById("evtEnd").value);
 
-      const startStr = document.getElementById("evStart").value;
-      const endStr = document.getElementById("evEnd").value;
-      const allDay = document.getElementById("evAllDay").value === "1";
+      const repeat = document.getElementById("evtRepeat").value;
+      const interval = parseInt(document.getElementById("evtInterval").value || "1", 10);
+      const untilStr = document.getElementById("evtUntil").value;
+      const countStr = document.getElementById("evtCount").value;
 
-      if (!title) { setErr("Title required"); return; }
-      if (!startStr || !endStr) { setErr("Start and end required"); return; }
+      if (!title) { setStatus("Title required.", true); return; }
+      if (!start || !end || end <= start) { setStatus("Start/End invalid.", true); return; }
 
-      const start_ts = new Date(startStr).getTime();
-      const end_ts = new Date(endStr).getTime();
-      if (!Number.isFinite(start_ts) || !Number.isFinite(end_ts) || end_ts <= start_ts) {
-        setErr("Invalid start/end");
-        return;
+      let recurrence = null;
+      if (repeat !== "none") {
+        recurrence = {
+          freq: repeat, // daily/weekly/monthly
+          interval: Number.isFinite(interval) && interval > 0 ? interval : 1,
+          until: untilStr ? new Date(untilStr + "T23:59:59").getTime() : null,
+          count: countStr ? Math.max(1, parseInt(countStr, 10)) : null
+        };
       }
 
-      const rrule = document.getElementById("recRrule").value.trim() || null;
+      const payload = {
+        calendar_id,
+        title,
+        location: location || null,
+        notes: notes || null,
+        icon: icon || null,
+        all_day,
+        start_ts: start,
+        end_ts: end,
+        color: color && color !== "#000000" ? color : null,
+        recurrence
+      };
 
       const res = await fetch(API + "/events", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({
-          calendar_id: selectedCalendar.id,
-          title,
-          location,
-          icon,
-          start_ts,
-          end_ts,
-          all_day: allDay,
-          rrule
-        })
+        body: JSON.stringify(payload)
       });
 
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) { setErr(data.error || "Failed to create event"); return; }
+      const data = await res.json().catch(()=> ({}));
+      if (!res.ok) { setStatus(data.error || "Failed to create event", true); return; }
 
-      document.getElementById("evTitle").value = "";
-      document.getElementById("evLocation").value = "";
-      updateRRule();
-      await loadEvents();
+      closeEventModal();
+      await loadEventsForVisibleMonth();
+      renderMonth();
+      setStatus("Event saved.");
     }
 
-    async function loadEvents() {
-      setErr("");
-      if (!selectedCalendar) return;
+    // Expand recurrence locally for display only (simple freq/interval/until/count)
+    function expandEventsIntoRange(raw, rangeStart, rangeEnd){
+      const out = [];
 
-      const fromD = document.getElementById("rangeFrom").value;
-      const toD = document.getElementById("rangeTo").value;
-      if (!fromD || !toD) { setErr("Pick from/to"); return; }
+      for (const e of raw) {
+        // If no recurrence, just include if overlaps day range
+        if (!e.recurrence) {
+          if (e.start_ts < rangeEnd && e.end_ts > rangeStart) out.push(e);
+          continue;
+        }
 
-      const from = new Date(fromD + "T00:00:00").getTime();
-      const to = new Date(toD + "T23:59:59").getTime();
+        let r = null;
+        try { r = typeof e.recurrence === "string" ? JSON.parse(e.recurrence) : e.recurrence; } catch {}
+        if (!r || !r.freq) {
+          if (e.start_ts < rangeEnd && e.end_ts > rangeStart) out.push(e);
+          continue;
+        }
 
-      const url = API + "/events?calendar_id=" + encodeURIComponent(selectedCalendar.id)
-        + "&from=" + from + "&to=" + to + "&expand=1";
+        const freq = r.freq;
+        const interval = (Number(r.interval) > 0) ? Number(r.interval) : 1;
+        const until = Number.isFinite(r.until) ? r.until : null;
+        const count = Number.isFinite(r.count) ? r.count : null;
 
-      const res = await fetch(url, { credentials: "include" });
-      const data = await res.json().catch(() => ({}));
+        // Generate occurrences starting from original event start, stepping by freq.
+        let occStart = e.start_ts;
+        let occEnd = e.end_ts;
+        let n = 0;
 
-      if (!res.ok) {
-        if (res.status === 401) location.href="/login.html";
-        setErr(data.error || "Failed to load events");
-        return;
+        // Safety cap to avoid infinite loops
+        const HARD_CAP = 500;
+
+        while (n < HARD_CAP) {
+          // stop if beyond range end
+          if (occStart >= rangeEnd) break;
+          // stop if until exceeded
+          if (until && occStart > until) break;
+          // stop if count reached
+          if (count && n >= count) break;
+
+          if (occStart < rangeEnd && occEnd > rangeStart) {
+            out.push({ ...e, start_ts: occStart, end_ts: occEnd });
+          }
+
+          // step
+          const s = new Date(occStart);
+          const eDur = occEnd - occStart;
+
+          if (freq === "daily") s.setDate(s.getDate() + interval);
+          else if (freq === "weekly") s.setDate(s.getDate() + (7 * interval));
+          else if (freq === "monthly") s.setMonth(s.getMonth() + interval);
+          else break;
+
+          occStart = s.getTime();
+          occEnd = occStart + eDur;
+          n++;
+        }
       }
 
-      renderEvents(data.occurrences || []);
+      return out;
     }
 
-    function renderEvents(occurrences) {
-      const list = document.getElementById("eventsList");
-      list.innerHTML = "";
-
-      const calColor = selectedCalendar?.color || "#f5f5f5";
-
-      occurrences.forEach(o => {
-        const li = document.createElement("li");
-        li.className = "event";
-
-        const left = document.createElement("div");
-        left.className = "eventLeft";
-
-        const iconBox = document.createElement("div");
-        iconBox.className = "iconBox";
-        iconBox.style.borderColor = calColor;
-
-        const iconSpan = document.createElement("span");
-        iconSpan.className = "mdi " + (o.icon ? o.icon : "mdi-calendar");
-        iconSpan.style.color = calColor;
-
-        iconBox.appendChild(iconSpan);
-
-        const textBox = document.createElement("div");
-
-        const title = document.createElement("div");
-        title.className = "eventTitle";
-        title.textContent = o.title;
-
-        const meta = document.createElement("div");
-        meta.className = "eventMeta";
-
-        const when = formatWhen(o.start_ts, o.end_ts, o.all_day);
-        const loc = o.location ? (" • " + o.location) : "";
-        const recur = o.rrule ? (" • Recurring") : "";
-
-        meta.textContent = when + loc + recur;
-
-        textBox.appendChild(title);
-        textBox.appendChild(meta);
-
-        left.appendChild(iconBox);
-        left.appendChild(textBox);
-
-        const right = document.createElement("div");
-        right.className = "eventRight";
-
-        const del = document.createElement("button");
-        del.className = "btnDanger";
-        del.textContent = "Delete";
-        del.onclick = () => deleteEvent(o.event_id);
-
-        right.appendChild(del);
-
-        li.appendChild(left);
-        li.appendChild(right);
-
-        list.appendChild(li);
-      });
-
-      if (!occurrences.length) {
-        const empty = document.createElement("div");
-        empty.className = "muted";
-        empty.textContent = "No events in this range.";
-        list.appendChild(empty);
-      }
-    }
-
-    async function deleteEvent(id) {
-      // Deletes the series/event (not a single occurrence). Simple on purpose.
-      const res = await fetch(API + "/events", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ id })
-      });
-      if (!res.ok && res.status === 401) location.href="/login.html";
-      await loadEvents();
-    }
-
-    function quickAdd() {
-      setErr("");
-      if (!selectedCalendar) { setErr("Create/select a calendar first"); return; }
-
-      const txt = (document.getElementById("quickText").value || "").trim();
-      if (!txt) return;
-
-      const parsed = parseQuickAdd(txt);
-      if (!parsed) { setErr("Could not parse. Use: MM/DD HH:MM Title at Location"); return; }
-
-      // Fill the form and create
-      document.getElementById("evTitle").value = parsed.title;
-      document.getElementById("evLocation").value = parsed.location || "";
-      document.getElementById("evIcon").value = guessIcon(parsed.title, parsed.location);
-
-      document.getElementById("evStart").value = toDateTimeLocal(new Date(parsed.start_ts));
-      document.getElementById("evEnd").value = toDateTimeLocal(new Date(parsed.end_ts));
-
-      document.getElementById("recEnabled").value = "0";
-      toggleRecurrence();
-
-      createEvent();
-      document.getElementById("quickText").value = "";
-    }
-
-    function parseQuickAdd(s) {
-      // Supports:
-      // 1) "2/12 10:30 Title at Location"
-      // 2) "2/12 10:30-11:30 Title at Location"
-      // Optional year: "2026-02-12 10:30 ..."
-      const now = new Date();
-      let m = s.match(/^(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{2})(?:\s*-\s*(\d{1,2}):(\d{2}))?\s+(.+)$/);
-      let date;
-      let startH, startM, endH, endM, rest;
-
-      if (m) {
-        const mm = parseInt(m[1], 10) - 1;
-        const dd = parseInt(m[2], 10);
-        startH = parseInt(m[3], 10);
-        startM = parseInt(m[4], 10);
-        endH = m[5] ? parseInt(m[5], 10) : null;
-        endM = m[6] ? parseInt(m[6], 10) : null;
-        rest = m[7].trim();
-
-        date = new Date(now.getFullYear(), mm, dd, startH, startM, 0, 0);
-      } else {
-        m = s.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{1,2}):(\d{2})(?:\s*-\s*(\d{1,2}):(\d{2}))?\s+(.+)$/);
-        if (!m) return null;
-        const y = parseInt(m[1], 10);
-        const mo = parseInt(m[2], 10) - 1;
-        const dd = parseInt(m[3], 10);
-        startH = parseInt(m[4], 10);
-        startM = parseInt(m[5], 10);
-        endH = m[6] ? parseInt(m[6], 10) : null;
-        endM = m[7] ? parseInt(m[7], 10) : null;
-        rest = m[8].trim();
-
-        date = new Date(y, mo, dd, startH, startM, 0, 0);
-      }
-
-      // split title/location on " at "
-      let title = rest;
-      let location = "";
-      const atIdx = rest.toLowerCase().lastIndexOf(" at ");
-      if (atIdx !== -1) {
-        title = rest.slice(0, atIdx).trim();
-        location = rest.slice(atIdx + 4).trim();
-      }
-
-      const start_ts = date.getTime();
-      let end_ts;
-
-      if (endH != null && endM != null) {
-        const endDate = new Date(date.getTime());
-        endDate.setHours(endH, endM, 0, 0);
-        end_ts = endDate.getTime();
-        if (end_ts <= start_ts) end_ts = start_ts + 30 * 60 * 1000; // fallback
-      } else {
-        end_ts = start_ts + 30 * 60 * 1000;
-      }
-
-      if (!title) return null;
-
-      return { title, location, start_ts, end_ts };
-    }
-
-    function guessIcon(title, location) {
-      const t = (title + " " + (location || "")).toLowerCase();
-      if (t.includes("doctor") || t.includes("nurse") || t.includes("appointment") || t.includes("clinic")) return "mdi-stethoscope";
-      if (t.includes("school") || t.includes("class")) return "mdi-school";
-      if (t.includes("soccer")) return "mdi-soccer";
-      if (t.includes("dentist")) return "mdi-tooth";
-      if (t.includes("birthday")) return "mdi-cake-variant";
-      return "mdi-calendar";
-    }
-
-    function formatWhen(start_ts, end_ts, allDay) {
-      const s = new Date(start_ts);
-      const e = new Date(end_ts);
-      if (allDay) return s.toLocaleDateString();
-
-      const sameDay = s.toDateString() === e.toDateString();
-      if (sameDay) {
-        return s.toLocaleDateString() + " " + s.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})
-          + "–" + e.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-      }
-      return s.toLocaleString() + " → " + e.toLocaleString();
-    }
-
-    function toDateInput(d) {
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, "0");
-      const da = String(d.getDate()).padStart(2, "0");
-      return `${y}-${m}-${da}`;
-    }
-
-    function toDateTimeLocal(d) {
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, "0");
-      const da = String(d.getDate()).padStart(2, "0");
-      const hh = String(d.getHours()).padStart(2, "0");
-      const mm = String(d.getMinutes()).padStart(2, "0");
-      return `${y}-${m}-${da}T${hh}:${mm}`;
-    }
-
-    async function logout() {
-      try { await fetch(API + "/auth/logout", { method: "POST", credentials: "include" }); } catch {}
+    // ---------- Logout ----------
+    async function logout(){
+      await fetch(API + "/auth/logout", { method:"POST", credentials:"include" });
       location.href = "/login.html";
     }
 
-    function setErr(t) { document.getElementById("err").textContent = t; }
+    // ---------- Helpers ----------
+    function setStatus(msg, bad=false){
+      const el = document.getElementById("status");
+      el.textContent = msg;
+      el.style.color = bad ? "var(--danger)" : "var(--muted)";
+    }
 
-    init();
+    function toLocalInput(date){
+      // yyyy-mm-ddThh:mm for datetime-local
+      const pad = (n)=>String(n).padStart(2,"0");
+      const y = date.getFullYear();
+      const m = pad(date.getMonth()+1);
+      const d = pad(date.getDate());
+      const h = pad(date.getHours());
+      const min = pad(date.getMinutes());
+      return `${y}-${m}-${d}T${h}:${min}`;
+    }
+
+    function fromLocalInput(v){
+      if (!v) return null;
+      const d = new Date(v);
+      return Number.isFinite(d.getTime()) ? d.getTime() : null;
+    }
+
+    function keyYMD(d){
+      const pad = (n)=>String(n).padStart(2,"0");
+      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+    }
+
+    function formatTime(ts){
+      const d = new Date(ts);
+      return d.toLocaleTimeString([], { hour:"numeric", minute:"2-digit" });
+    }
+
+    function escapeHtml(s){
+      return String(s ?? "").replace(/[&<>"']/g, c => ({
+        "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+      }[c]));
+    }
   </script>
 </body>
 </html>
