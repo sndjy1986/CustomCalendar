@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Kid Landing | Family Calendar</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css">
+  <style>
+    :root{
+      --bg:#0b0f14; --panel:#101826; --panel2:#0f172a;
+      --text:#e5e7eb; --muted:#9ca3af; --line:#22314a; --accent:#60a5fa;
+      --danger:#fb7185; --ok:#86efac; --warn:#fcd34d;
+    }
+    *{ box-sizing:border-box; }
+    body{ margin:0; font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial; background:var(--bg); color:var(--text); }
+    main{ max-width:1100px; margin:0 auto; padding:16px; display:flex; flex-direction:column; gap:12px; }
+    .topbar,.card{ border:1px solid var(--line); background:rgba(16,24,38,.7); border-radius:14px; }
+    .topbar{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px; }
+    .title{ display:flex; align-items:center; gap:10px; font-weight:800; }
+    .title i{ font-size:20px; color:var(--accent); }
+    .row{ display:flex; align-items:center; gap:10px; }
+    .col{ display:flex; flex-direction:column; gap:10px; }
+    .grid{ display:grid; grid-template-columns:1.1fr 1.1fr .8fr; gap:12px; }
+    .card{ padding:12px; }
+    h2{ margin:0; font-size:16px; }
+    .muted,.tiny{ color:var(--muted); }
+    .tiny{ font-size:12px; font-weight:700; }
+    button{ cursor:pointer; background:#0b1220; color:var(--text); border:1px solid var(--line); padding:9px 12px; border-radius:12px; font-weight:700; }
+    button:hover{ border-color:#36507c; }
+    .primary{ background:var(--accent); color:#07111f; border-color:transparent; }
+    .danger{ border-color:rgba(251,113,133,.35); color:#fecdd3; }
+    .ghost{ background:transparent; }
+    .success{ color:var(--ok); }
+    .warn{ color:var(--warn); }
+    input,select,textarea{ width:100%; padding:10px 12px; border-radius:12px; border:1px solid var(--line); background:#0b1220; color:var(--text); outline:none; }
+    textarea{ min-height:80px; resize:vertical; }
+    label{ font-size:12px; font-weight:900; color:var(--muted); }
+    .chore{ border:1px solid rgba(255,255,255,.07); border-radius:12px; padding:10px; background:rgba(2,6,23,.35); display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+    .statusPill{ display:inline-flex; align-items:center; gap:5px; border:1px solid rgba(255,255,255,.18); border-radius:999px; padding:2px 9px; font-size:12px; font-weight:800; }
+    .split{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .stats{ display:grid; gap:8px; }
+    .stat{ border:1px solid rgba(255,255,255,.07); background:rgba(2,6,23,.35); border-radius:12px; padding:10px; }
+    .modalWrap{ position:fixed; inset:0; display:none; background:rgba(0,0,0,.6); align-items:center; justify-content:center; padding:16px; }
+    .modal{ width:min(620px,100%); border:1px solid var(--line); background:rgba(15,23,42,.95); border-radius:18px; padding:14px; }
+    .modalHeader{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+    @media (max-width: 900px){ .grid{ grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+<main>
+  <div class="topbar">
+    <div class="title">
+      <i class="mdi mdi-human-child"></i>
+      <div>
+        <div>Kid Landing</div>
+        <div class="tiny" id="who"></div>
+      </div>
+    </div>
+    <div class="row">
+      <button class="ghost" onclick="location.href='/index.html'"><i class="mdi mdi-calendar"></i> Calendar</button>
+      <button class="ghost" onclick="openChoreModal()"><i class="mdi mdi-plus"></i> Add chore</button>
+      <button class="ghost" onclick="openGiftModal()"><i class="mdi mdi-gift"></i> Add gift cards</button>
+      <button class="danger" onclick="logout()"><i class="mdi mdi-logout"></i> Logout</button>
+    </div>
+  </div>
+
+  <div class="card col">
+    <div class="split">
+      <div class="col">
+        <label>Select kid</label>
+        <select id="kidSelect" onchange="onKidChange()"></select>
+      </div>
+      <div class="col">
+        <label>Profile</label>
+        <div class="row" style="padding:10px;border:1px solid var(--line);border-radius:12px;background:#0b1220;">
+          <i id="kidAvatar" class="mdi mdi-account-star" style="font-size:26px;color:var(--accent);"></i>
+          <div>
+            <div style="font-weight:900;" id="kidName">-</div>
+            <div class="tiny" id="kidSummary">-</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="tiny" id="status"></div>
+  </div>
+
+  <div class="grid">
+    <section class="card col">
+      <div class="row" style="justify-content:space-between;"><h2>Due now</h2><button class="ghost" onclick="refreshAll()"><i class="mdi mdi-refresh"></i></button></div>
+      <div class="tiny">Assigned chores currently due or overdue.</div>
+      <div id="dueNowList" class="col"></div>
+    </section>
+
+    <section class="card col">
+      <h2>Completed</h2>
+      <div class="tiny">Completed chores are pending parent approval until reward is issued.</div>
+      <div id="completedList" class="col"></div>
+    </section>
+
+    <section class="card col">
+      <h2>Reward status</h2>
+      <div class="stats">
+        <div class="stat"><div class="tiny">Earned (completed)</div><div id="earnedCount" style="font-size:24px;font-weight:900;">0</div></div>
+        <div class="stat"><div class="tiny">Issued rewards</div><div id="issuedCount" style="font-size:24px;font-weight:900;">0</div></div>
+        <div class="stat"><div class="tiny">Overdue chores</div><div id="overdueCount" style="font-size:24px;font-weight:900;">0</div></div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<div class="modalWrap" id="choreModalWrap" onclick="if(event.target.id==='choreModalWrap') closeChoreModal()">
+  <div class="modal">
+    <div class="modalHeader">
+      <h2>Create Chore</h2>
+      <button class="ghost" onclick="closeChoreModal()"><i class="mdi mdi-close"></i></button>
+    </div>
+    <div class="col">
+      <label>Title</label>
+      <input id="choreTitle" placeholder="Unload dishwasher" />
+    </div>
+    <div class="col" style="margin-top:10px;">
+      <label>Description</label>
+      <textarea id="choreDesc" placeholder="Put dishes in correct cabinet"></textarea>
+    </div>
+    <div class="col" style="margin-top:10px;">
+      <label>Due</label>
+      <input id="choreDue" type="datetime-local" />
+    </div>
+    <div class="row" style="justify-content:flex-end; margin-top:10px;">
+      <button class="primary" onclick="createChore()">Create chore</button>
+    </div>
+  </div>
+</div>
+
+<div class="modalWrap" id="giftModalWrap" onclick="if(event.target.id==='giftModalWrap') closeGiftModal()">
+  <div class="modal">
+    <div class="modalHeader">
+      <h2>Add Gift Cards</h2>
+      <button class="ghost" onclick="closeGiftModal()"><i class="mdi mdi-close"></i></button>
+    </div>
+    <div class="col">
+      <label>Gift card codes (one per line)</label>
+      <textarea id="giftCodes" placeholder="TARGET-10\nAMZN-15"></textarea>
+    </div>
+    <div class="row" style="justify-content:flex-end; margin-top:10px;">
+      <button class="primary" onclick="addGiftCards()">Add codes</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const API = "https://api.cal.sndjy.us";
+  let me = null;
+  let kids = [];
+  let selectedKidId = null;
+  let landing = null;
+  let dueNow = [];
+  let completed = [];
+  let rewarded = [];
+
+  (async function init(){
+    await requireLogin();
+    await loadKids();
+    await refreshAll();
+  })();
+
+  async function apiFetch(path, options={}){
+    const res = await fetch(API + path, { credentials: "include", ...options });
+    if (res.status === 401) {
+      location.href = "/login.html";
+      throw new Error("Unauthorized");
+    }
+    const data = await res.json().catch(() => ({}));
+    return { res, data };
+  }
+
+  async function requireLogin(){
+    const { data } = await apiFetch('/auth/me');
+    if (!data.logged_in) { location.href = '/login.html'; return; }
+    me = data.user;
+    document.getElementById('who').textContent = me.email;
+    setStatus('Logged in.');
+  }
+
+  async function loadKids(){
+    const { res, data } = await apiFetch('/kids');
+    if (!res.ok) { setStatus(data.error || 'Failed to load kids', true); return; }
+    kids = data.kids || [];
+    const sel = document.getElementById('kidSelect');
+    sel.innerHTML = '';
+
+    if (!kids.length) {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = 'No kids found';
+      sel.appendChild(opt);
+      setStatus('Add a kid from API first before using kid landing.', true);
+      return;
+    }
+
+    for (const kid of kids) {
+      const opt = document.createElement('option');
+      opt.value = kid.id;
+      opt.textContent = kid.name;
+      sel.appendChild(opt);
+    }
+
+    const queryKid = new URLSearchParams(location.search).get('kid_id');
+    selectedKidId = (queryKid && kids.some(k => k.id === queryKid)) ? queryKid : kids[0].id;
+    sel.value = selectedKidId;
+  }
+
+  async function onKidChange(){
+    selectedKidId = document.getElementById('kidSelect').value;
+    const next = new URL(location.href);
+    next.searchParams.set('kid_id', selectedKidId);
+    history.replaceState(null, '', next.toString());
+    await refreshAll();
+  }
+
+  async function refreshAll(){
+    if (!selectedKidId) return;
+    await Promise.all([loadKidLanding(), loadDueNow(), loadCompletedLists()]);
+    renderAll();
+  }
+
+  async function loadKidLanding(){
+    const { res, data } = await apiFetch(`/kids/${encodeURIComponent(selectedKidId)}/landing`);
+    if (!res.ok) { setStatus(data.error || 'Failed to load kid summary', true); return; }
+    landing = data;
+  }
+
+  async function loadDueNow(){
+    const now = Date.now();
+    const qs = new URLSearchParams({ kid_id: selectedKidId, status: 'assigned', due_before: String(now) });
+    const { res, data } = await apiFetch('/chores?' + qs.toString());
+    if (!res.ok) { setStatus(data.error || 'Failed to load due chores', true); return; }
+    dueNow = data.chores || [];
+  }
+
+  async function loadCompletedLists(){
+    const completedQs = new URLSearchParams({ kid_id: selectedKidId, status: 'completed' });
+    const rewardedQs = new URLSearchParams({ kid_id: selectedKidId, status: 'rewarded' });
+    const [a,b] = await Promise.all([
+      apiFetch('/chores?' + completedQs.toString()),
+      apiFetch('/chores?' + rewardedQs.toString())
+    ]);
+    if (!a.res.ok) { setStatus(a.data.error || 'Failed to load completed chores', true); return; }
+    if (!b.res.ok) { setStatus(b.data.error || 'Failed to load issued rewards', true); return; }
+    completed = a.data.chores || [];
+    rewarded = b.data.chores || [];
+  }
+
+  function renderAll(){
+    const kid = kids.find(k => k.id === selectedKidId);
+    document.getElementById('kidName').textContent = kid?.name || 'Unknown';
+    document.getElementById('kidAvatar').className = `mdi ${escapeHtml(kid?.avatar || 'mdi-account-star')}`;
+
+    const summary = landing?.summary || {};
+    document.getElementById('kidSummary').textContent = `${summary.due_soon_count || 0} due soon • ${summary.completed_count || 0} completed`;
+    document.getElementById('overdueCount').textContent = String(summary.overdue_count || 0);
+
+    renderDueNow();
+    renderCompleted();
+
+    document.getElementById('earnedCount').textContent = String(completed.length);
+    document.getElementById('issuedCount').textContent = String(rewarded.length);
+  }
+
+  function renderDueNow(){
+    const wrap = document.getElementById('dueNowList');
+    wrap.innerHTML = '';
+
+    if (!dueNow.length) {
+      wrap.innerHTML = '<div class="tiny">Nothing due right now 🎉</div>';
+      return;
+    }
+
+    for (const chore of dueNow) {
+      const el = document.createElement('div');
+      el.className = 'chore';
+      el.innerHTML = `
+        <div>
+          <div style="font-weight:900;">${escapeHtml(chore.title)}</div>
+          <div class="tiny">Due ${new Date(chore.due_ts).toLocaleString()}</div>
+          ${chore.description ? `<div class="tiny">${escapeHtml(chore.description)}</div>` : ''}
+        </div>
+        <div class="col" style="align-items:flex-end;">
+          <span class="statusPill warn"><i class="mdi mdi-clock-alert-outline"></i> Assigned</span>
+          <button class="primary" onclick="markComplete('${escapeJs(chore.id)}')"><i class="mdi mdi-check"></i> Mark done</button>
+        </div>
+      `;
+      wrap.appendChild(el);
+    }
+  }
+
+  function renderCompleted(){
+    const wrap = document.getElementById('completedList');
+    wrap.innerHTML = '';
+
+    const all = [
+      ...completed.map(c => ({ ...c, displayState: 'pending' })),
+      ...rewarded.map(c => ({ ...c, displayState: 'issued' }))
+    ].sort((a,b) => (b.completed_at || b.rewarded_at || b.created_at) - (a.completed_at || a.rewarded_at || a.created_at));
+
+    if (!all.length) {
+      wrap.innerHTML = '<div class="tiny">No completed chores yet.</div>';
+      return;
+    }
+
+    for (const chore of all) {
+      const isIssued = chore.displayState === 'issued';
+      const when = isIssued ? chore.rewarded_at : chore.completed_at;
+      const el = document.createElement('div');
+      el.className = 'chore';
+      el.innerHTML = `
+        <div>
+          <div style="font-weight:900;">${escapeHtml(chore.title)}</div>
+          <div class="tiny">${isIssued ? 'Reward issued' : 'Completed'} ${when ? new Date(when).toLocaleString() : ''}</div>
+        </div>
+        <div class="col" style="align-items:flex-end;">
+          <span class="statusPill ${isIssued ? 'success' : 'warn'}">
+            <i class="mdi ${isIssued ? 'mdi-gift-open-outline' : 'mdi-timer-sand'}"></i>
+            ${isIssued ? 'Reward issued' : 'Pending approval'}
+          </span>
+          ${isIssued ? '' : `<button onclick="issueReward('${escapeJs(chore.id)}')" class="primary"><i class="mdi mdi-gift"></i> Issue reward</button>`}
+        </div>
+      `;
+      wrap.appendChild(el);
+    }
+  }
+
+  async function markComplete(choreId){
+    const { res, data } = await apiFetch('/chores/' + encodeURIComponent(choreId), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'completed' })
+    });
+
+    if (!res.ok) { setStatus(data.error || 'Failed to mark chore complete', true); return; }
+    setStatus('Chore marked complete. Pending approval.');
+    await refreshAll();
+  }
+
+  async function issueReward(choreId){
+    const { res, data } = await apiFetch('/rewards/issue', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chore_id: choreId })
+    });
+
+    if (!res.ok) { setStatus(data.error || 'Failed to issue reward', true); return; }
+    setStatus('Reward issued successfully.');
+    await refreshAll();
+  }
+
+  function openChoreModal(){
+    if (!selectedKidId) { setStatus('Select a kid first.', true); return; }
+    const due = new Date(Date.now() + 60*60*1000);
+    document.getElementById('choreDue').value = toLocalInput(due);
+    document.getElementById('choreModalWrap').style.display = 'flex';
+  }
+  function closeChoreModal(){ document.getElementById('choreModalWrap').style.display = 'none'; }
+
+  async function createChore(){
+    const title = document.getElementById('choreTitle').value.trim();
+    const description = document.getElementById('choreDesc').value.trim();
+    const due_ts = fromLocalInput(document.getElementById('choreDue').value);
+
+    if (!selectedKidId) { setStatus('Select a kid first.', true); return; }
+    if (!title) { setStatus('Chore title is required.', true); return; }
+    if (!due_ts) { setStatus('Valid due date/time is required.', true); return; }
+
+    const { res, data } = await apiFetch('/chores', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kid_id: selectedKidId, title, description, due_ts })
+    });
+
+    if (!res.ok) { setStatus(data.error || 'Failed to create chore', true); return; }
+    document.getElementById('choreTitle').value = '';
+    document.getElementById('choreDesc').value = '';
+    closeChoreModal();
+    setStatus('Chore created.');
+    await refreshAll();
+  }
+
+  function openGiftModal(){ document.getElementById('giftModalWrap').style.display = 'flex'; }
+  function closeGiftModal(){ document.getElementById('giftModalWrap').style.display = 'none'; }
+
+  async function addGiftCards(){
+    const raw = document.getElementById('giftCodes').value;
+    const codes = raw.split(/\r?\n/).map(x => x.trim()).filter(Boolean);
+    if (!codes.length) { setStatus('Enter at least one gift card code.', true); return; }
+
+    const { res, data } = await apiFetch('/gift-cards', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ codes })
+    });
+
+    if (!res.ok) { setStatus(data.error || 'Failed to add gift cards', true); return; }
+    document.getElementById('giftCodes').value = '';
+    closeGiftModal();
+    setStatus(`Added ${data.inserted || codes.length} gift card(s).`);
+  }
+
+  async function logout(){
+    await apiFetch('/auth/logout', { method:'POST' });
+    location.href = '/login.html';
+  }
+
+  function setStatus(msg, bad=false){
+    const el = document.getElementById('status');
+    el.textContent = msg;
+    el.style.color = bad ? 'var(--danger)' : 'var(--muted)';
+  }
+
+  function toLocalInput(date){
+    const pad = n => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  }
+
+  function fromLocalInput(v){
+    if (!v) return null;
+    const d = new Date(v);
+    return Number.isFinite(d.getTime()) ? d.getTime() : null;
+  }
+
+  function escapeHtml(s){
+    return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;' }[c]));
+  }
+
+  function escapeJs(s){
+    return String(s ?? '').replace(/['\\]/g, '\\$&');
+  }
+</script>
+</body>
+</html>
