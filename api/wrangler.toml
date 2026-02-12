@@ -16,4 +16,4 @@ JWT_SECRET = "saidtoreplacewithalongrandomstringsoijustthoughtaboutthis"
 
 # One-time bootstrap token to create your first user (admin).
 # Keep it secret. After you create your account, you can change it or ignore it.
-BOOTSTRAP_TOKEN = "joeyisawesome"
+BOOTSTRAP_TOKEN = "Joey1234"
