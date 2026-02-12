@@ -551,7 +551,9 @@ export default {
 
 function normalizePath(path) {
   if (!path) return "/";
-  const trimmed = path.replace(/\/+$, "");
+  let trimmed = path.replace(/\/+$, "");
+  if (trimmed.startsWith("/api/")) trimmed = trimmed.slice(4);
+  if (trimmed === "/api") trimmed = "/";
   return trimmed || "/";
 }
 
@@ -561,11 +563,10 @@ function normalizePath(path) {
 
 function cors(env, request, response) {
   const origin = request.headers.get("Origin") || "";
-  const allowed = getAllowedOrigins(env);
 
   const headers = new Headers(response.headers);
 
-  if (origin && allowed.has(origin)) {
+  if (origin && isAllowedOrigin(env, origin)) {
     headers.set("Access-Control-Allow-Origin", origin);
     headers.set("Access-Control-Allow-Credentials", "true");
     headers.set("Vary", "Origin");
@@ -584,6 +585,22 @@ function getAllowedOrigins(env) {
   const raw = normalize(env.FRONTEND_ORIGIN);
   if (raw) raw.split(",").map(s => s.trim()).filter(Boolean).forEach(o => set.add(o));
   return set;
+}
+
+function isAllowedOrigin(env, origin) {
+  const allowed = getAllowedOrigins(env);
+  if (allowed.has(origin)) return true;
+
+  if (!origin.startsWith("https://")) return false;
+  try {
+    const { hostname } = new URL(origin);
+    if (hostname === "customcalendar.pages.dev") return true;
+    if (hostname.endsWith(".customcalendar.pages.dev")) return true;
+  } catch (_) {
+    return false;
+  }
+
+  return false;
 }
 
 /* =======================
