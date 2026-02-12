@@ -79,7 +79,6 @@
     .row{ display:flex; gap:10px; align-items:center; }
     .col{ display:flex; flex-direction:column; gap:10px; }
 
-    /* Calendar grid */
     .dow{
       display:grid;
       grid-template-columns: repeat(7, 1fr);
@@ -141,6 +140,7 @@
       background:rgba(2,6,23,.35);
       font-size:12px;
       line-height:1.2;
+      user-select:none;
     }
     .evt i{ font-size:16px; opacity:.95; }
     .evt .t{ font-weight:800; }
@@ -149,7 +149,6 @@
       width:10px; height:10px; border-radius:999px; flex:0 0 auto;
     }
 
-    /* Sidebar calendars */
     .calItem{
       display:flex; align-items:center; justify-content:space-between;
       gap:10px;
@@ -178,7 +177,6 @@
     .split{ display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
     .split3{ display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px; }
 
-    /* Modal */
     .modalWrap{
       position:fixed; inset:0; display:none;
       background:rgba(0,0,0,.6);
@@ -281,7 +279,7 @@
   <div class="modalWrap" id="evtModalWrap" onclick="if(event.target.id==='evtModalWrap') closeEventModal()">
     <div class="modal">
       <div class="modalHeader">
-        <h2>New Event</h2>
+        <h2 id="evtModalTitle">New Event</h2>
         <button class="ghost" onclick="closeEventModal()"><i class="mdi mdi-close"></i></button>
       </div>
 
@@ -362,23 +360,40 @@
       </div>
 
       <div class="row" style="justify-content:flex-end; margin-top:10px;">
-        <!-- FIXED: don't call the ancient DOM createEvent() -->
-        <button class="primary" onclick="saveEvent()">Save Event</button>
+        <button class="primary" onclick="saveEvent()"><i class="mdi mdi-content-save"></i> Save</button>
       </div>
     </div>
   </div>
 
+  <!-- ✅ Right-click Context Menu -->
+  <div class="modalWrap" id="ctxWrap" onclick="if(event.target.id==='ctxWrap') closeCtxMenu()">
+    <div class="modal" style="width:320px;">
+      <div class="modalHeader">
+        <h2 id="ctxTitle">Event</h2>
+        <button class="ghost" onclick="closeCtxMenu()"><i class="mdi mdi-close"></i></button>
+      </div>
+
+      <div class="col">
+        <button class="primary" onclick="ctxEdit()"><i class="mdi mdi-pencil"></i> Edit</button>
+        <button class="danger" onclick="ctxDelete()"><i class="mdi mdi-trash-can"></i> Delete</button>
+      </div>
+
+      <div class="tiny" id="ctxMeta" style="margin-top:10px;"></div>
+    </div>
+  </div>
+
   <script>
-    // ✅ Set your API base here
     const API = "https://api.cal.sndjy.us";
 
-    // State
     let me = null;
     let calendars = [];
-    let events = []; // raw events from API
-    let viewDate = new Date(); // current month reference
+    let events = [];
+    let viewDate = new Date();
 
-    // ---------- Boot ----------
+    // right-click state
+    let ctxEvent = null;
+    let editEventId = null;
+
     (async function init(){
       await requireLogin();
       await loadCalendars();
@@ -400,7 +415,6 @@
       setStatus("Logged in.");
     }
 
-    // ---------- Calendars ----------
     async function loadCalendars(){
       const res = await fetch(API + "/calendars", { credentials: "include" });
       const data = await res.json();
@@ -479,12 +493,12 @@
       setStatus("Calendar created.");
     }
 
-    // ---------- Month grid ----------
     function goToday(){
       viewDate = new Date();
       renderMonth();
       loadEventsForVisibleMonth().then(()=>renderMonth());
     }
+
     function shiftMonth(delta){
       viewDate = new Date(viewDate.getFullYear(), viewDate.getMonth() + delta, 1);
       renderMonth();
@@ -545,6 +559,13 @@
           const item = document.createElement("div");
           item.className = "evt";
           item.title = `${o.title}${o.location ? " @ " + o.location : ""}`;
+
+          // ✅ right-click menu
+          item.oncontextmenu = (e) => {
+            e.preventDefault();
+            openCtxMenu(o);
+          };
+
           item.innerHTML = `
             <span class="pill" style="background:${escapeHtml(color)}"></span>
             <i class="mdi ${escapeHtml(icon)}"></i>
@@ -583,7 +604,7 @@
       const res = await fetch(API + "/events?" + qs.toString(), { credentials: "include" });
       const data = await res.json().catch(()=> ({}));
       if (!res.ok) {
-        setStatus((data.details || data.error || "Failed to load events"), true);
+        setStatus(data.details || data.error || "Failed to load events", true);
         events = [];
         return;
       }
@@ -591,13 +612,15 @@
       setStatus("Events loaded.");
     }
 
-    // ---------- Events ----------
     function openEventModal(date = null){
       if (!calendars.length) {
         setStatus("Create a calendar first.", true);
         openCalendarModal();
         return;
       }
+
+      editEventId = null;
+      document.getElementById("evtModalTitle").textContent = "New Event";
 
       const now = new Date();
       const base = date ? new Date(date) : now;
@@ -621,11 +644,96 @@
 
       document.getElementById("evtModalWrap").style.display = "flex";
     }
+
     function closeEventModal(){
       document.getElementById("evtModalWrap").style.display = "none";
     }
 
-    // ✅ FIX: renamed from createEvent() to saveEvent()
+    // =========================
+    // Context Menu
+    // =========================
+    function openCtxMenu(evtObj){
+      ctxEvent = evtObj;
+      document.getElementById("ctxTitle").textContent = evtObj.title || "Event";
+
+      const meta = [];
+      if (evtObj.location) meta.push(evtObj.location);
+      meta.push(new Date(evtObj.start_ts).toLocaleString());
+      document.getElementById("ctxMeta").textContent = meta.join(" • ");
+
+      document.getElementById("ctxWrap").style.display = "flex";
+    }
+
+    function closeCtxMenu(){
+      document.getElementById("ctxWrap").style.display = "none";
+      ctxEvent = null;
+    }
+
+    function ctxEdit(){
+      if (!ctxEvent) return;
+      closeCtxMenu();
+      openEventModalFromExisting(ctxEvent);
+    }
+
+    async function ctxDelete(){
+      if (!ctxEvent) return;
+
+      const ok = confirm(`Delete "${ctxEvent.title}"?`);
+      if (!ok) return;
+
+      const id = ctxEvent.id;
+      closeCtxMenu();
+
+      const res = await fetch(API + "/events/" + encodeURIComponent(id), {
+        method: "DELETE",
+        credentials: "include"
+      });
+      const data = await res.json().catch(()=> ({}));
+      if (!res.ok) {
+        setStatus(data.error || data.details || "Failed to delete event", true);
+        return;
+      }
+
+      await loadEventsForVisibleMonth();
+      renderMonth();
+      setStatus("Event deleted.");
+    }
+
+    function openEventModalFromExisting(evtObj){
+      if (!calendars.length) return;
+
+      editEventId = evtObj.id;
+      document.getElementById("evtModalTitle").textContent = "Edit Event";
+
+      document.getElementById("evtTitle").value = evtObj.title || "";
+      document.getElementById("evtLocation").value = evtObj.location || "";
+      document.getElementById("evtNotes").value = evtObj.notes || "";
+      document.getElementById("evtIcon").value = evtObj.icon || "mdi-calendar";
+      document.getElementById("evtAllDay").value = evtObj.all_day ? "1" : "0";
+      document.getElementById("evtColor").value = (evtObj.color && evtObj.color !== "#000000") ? evtObj.color : "#000000";
+      document.getElementById("evtCalendar").value = evtObj.calendar_id;
+
+      document.getElementById("evtStart").value = toLocalInput(new Date(evtObj.start_ts));
+      document.getElementById("evtEnd").value = toLocalInput(new Date(evtObj.end_ts));
+
+      let r = null;
+      try { r = evtObj.recurrence ? JSON.parse(evtObj.recurrence) : null; } catch {}
+      if (!r || !r.freq) {
+        document.getElementById("evtRepeat").value = "none";
+        document.getElementById("evtInterval").value = "1";
+        document.getElementById("evtUntil").value = "";
+        document.getElementById("evtCount").value = "";
+      } else {
+        document.getElementById("evtRepeat").value = r.freq;
+        document.getElementById("evtInterval").value = String(r.interval || 1);
+        document.getElementById("evtUntil").value = r.until ? new Date(r.until).toISOString().slice(0,10) : "";
+        document.getElementById("evtCount").value = r.count ? String(r.count) : "";
+      }
+
+      document.getElementById("evtModalWrap").style.display = "flex";
+      setStatus("Editing event...");
+    }
+
     async function saveEvent(){
       const calendar_id = document.getElementById("evtCalendar").value;
       const title = document.getElementById("evtTitle").value.trim();
@@ -669,17 +777,25 @@
         recurrence
       };
 
-      const res = await fetch(API + "/events", {
-        method: "POST",
+      const isEdit = !!editEventId;
+      const url = isEdit ? (API + "/events/" + encodeURIComponent(editEventId)) : (API + "/events");
+      const method = isEdit ? "PUT" : "POST";
+
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify(payload)
       });
 
       const data = await res.json().catch(()=> ({}));
-      if (!res.ok) { setStatus(data.error || data.details || "Failed to save event", true); return; }
+      if (!res.ok) {
+        setStatus(data.error || data.details || "Failed to save event", true);
+        return;
+      }
 
       closeEventModal();
+      editEventId = null;
       await loadEventsForVisibleMonth();
       renderMonth();
       setStatus("Event saved.");
@@ -737,13 +853,11 @@
       return out;
     }
 
-    // ---------- Logout ----------
     async function logout(){
       await fetch(API + "/auth/logout", { method:"POST", credentials:"include" });
       location.href = "/login.html";
     }
 
-    // ---------- Helpers ----------
     function setStatus(msg, bad=false){
       const el = document.getElementById("status");
       el.textContent = msg;
