@@ -1,49 +1,52 @@
 <!doctype html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Under Construction</title>
-  <style>
-    body {
-      margin: 0;
-      min-height: 100vh;
-      display: grid;
-      place-items: center;
-      font-family: Arial, Helvetica, sans-serif;
-      background: #111;
-      color: #f5f5f5;
-      text-align: center;
-    }
-    .box {
-      padding: 2.5rem 2rem;
-      border: 2px solid #f5f5f5;
-      border-radius: 12px;
-      max-width: 520px;
-      width: calc(100% - 3rem);
-    }
-    h1 {
-      margin: 0 0 0.75rem 0;
-      letter-spacing: 0.2em;
-      font-size: 2rem;
-    }
-    p {
-      margin: 0;
-      opacity: 0.85;
-      line-height: 1.4;
-    }
-    .small {
-      margin-top: 1.25rem;
-      font-size: 0.9rem;
-      opacity: 0.6;
-    }
-  </style>
+  <meta charset="utf-8">
+  <title>Family Calendar</title>
 </head>
 <body>
-  <main class="box" role="main" aria-label="Under construction">
-    <h1>UNDER CONSTRUCTION</h1>
-    <p>This site is being built.</p>
-    <p class="small">Check back soon.</p>
-  </main>
+  <h1>Family Calendar</h1>
+
+  <h2>Create Calendar</h2>
+  <input id="name" placeholder="Calendar Name" />
+  <input id="color" type="color" value="#000000" />
+  <button onclick="createCalendar()">Create</button>
+
+  <h2>Calendars</h2>
+  <ul id="list"></ul>
+
+  <script>
+    const API = "https://YOUR_WORKER_URL";
+
+    async function loadCalendars() {
+      const res = await fetch(API + "/calendars");
+      const data = await res.json();
+
+      const list = document.getElementById("list");
+      list.innerHTML = "";
+
+      data.forEach(c => {
+        const li = document.createElement("li");
+        li.textContent = c.name + " (" + c.color + ")";
+        li.style.color = c.color;
+        list.appendChild(li);
+      });
+    }
+
+    async function createCalendar() {
+      const name = document.getElementById("name").value;
+      const color = document.getElementById("color").value;
+
+      await fetch(API + "/calendars", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, color })
+      });
+
+      loadCalendars();
+    }
+
+    loadCalendars();
+  </script>
 </body>
 </html>
