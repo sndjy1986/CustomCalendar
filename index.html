@@ -362,7 +362,8 @@
       </div>
 
       <div class="row" style="justify-content:flex-end; margin-top:10px;">
-        <button class="primary" onclick="createEvent()">Save Event</button>
+        <!-- FIXED: don't call the ancient DOM createEvent() -->
+        <button class="primary" onclick="saveEvent()">Save Event</button>
       </div>
     </div>
   </div>
@@ -376,7 +377,6 @@
     let calendars = [];
     let events = []; // raw events from API
     let viewDate = new Date(); // current month reference
-    let selectedCalendarId = ""; // optional future filter
 
     // ---------- Boot ----------
     (async function init(){
@@ -385,7 +385,7 @@
       renderCalendarSelect();
       renderMonth();
       await loadEventsForVisibleMonth();
-      renderMonth(); // re-render with events
+      renderMonth();
     })();
 
     async function requireLogin(){
@@ -499,14 +499,13 @@
       grid.innerHTML = "";
 
       const firstOfMonth = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
-      const startDow = firstOfMonth.getDay(); // 0=Sun
+      const startDow = firstOfMonth.getDay();
       const start = new Date(firstOfMonth);
       start.setDate(firstOfMonth.getDate() - startDow);
 
       const today = new Date();
       const todayKey = keyYMD(today);
 
-      // 6 weeks = 42 cells
       for (let i = 0; i < 42; i++) {
         const d = new Date(start);
         d.setDate(start.getDate() + i);
@@ -517,7 +516,6 @@
         const cell = document.createElement("div");
         cell.className = "day" + (outside ? " outside" : "");
         cell.onclick = (e) => {
-          // don't open if clicking on an event element
           if (e.target.closest(".evt")) return;
           openEventModal(d);
         };
@@ -532,38 +530,33 @@
         const evts = document.createElement("div");
         evts.className = "events";
 
-        // Get occurrences for this day
         const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0,0,0,0).getTime();
         const dayEnd   = new Date(d.getFullYear(), d.getMonth(), d.getDate()+1, 0,0,0,0).getTime();
 
         const occ = expandEventsIntoRange(events, dayStart, dayEnd);
-
-        // Render up to 6 per day
         const calById = new Map(calendars.map(c => [c.id, c]));
-        occ
-          .sort((a,b)=>a.start_ts-b.start_ts)
-          .slice(0, 6)
-          .forEach(o => {
-            const cal = calById.get(o.calendar_id);
-            const color = (o.color && o.color !== "#000000") ? o.color : (cal?.color || "#60a5fa");
-            const icon = o.icon || "mdi-calendar";
-            const timeLabel = o.all_day ? "All day" : formatTime(o.start_ts);
 
-            const item = document.createElement("div");
-            item.className = "evt";
-            item.title = `${o.title}${o.location ? " @ " + o.location : ""}`;
-            item.innerHTML = `
-              <span class="pill" style="background:${escapeHtml(color)}"></span>
-              <i class="mdi ${escapeHtml(icon)}"></i>
-              <div style="min-width:0;">
-                <div class="t" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(o.title)}</div>
-                <div class="s" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                  ${escapeHtml(timeLabel)}${o.location ? " • " + escapeHtml(o.location) : ""}
-                </div>
+        occ.sort((a,b)=>a.start_ts-b.start_ts).slice(0, 6).forEach(o => {
+          const cal = calById.get(o.calendar_id);
+          const color = (o.color && o.color !== "#000000") ? o.color : (cal?.color || "#60a5fa");
+          const icon = o.icon || "mdi-calendar";
+          const timeLabel = o.all_day ? "All day" : formatTime(o.start_ts);
+
+          const item = document.createElement("div");
+          item.className = "evt";
+          item.title = `${o.title}${o.location ? " @ " + o.location : ""}`;
+          item.innerHTML = `
+            <span class="pill" style="background:${escapeHtml(color)}"></span>
+            <i class="mdi ${escapeHtml(icon)}"></i>
+            <div style="min-width:0;">
+              <div class="t" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(o.title)}</div>
+              <div class="s" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                ${escapeHtml(timeLabel)}${o.location ? " • " + escapeHtml(o.location) : ""}
               </div>
-            `;
-            evts.appendChild(item);
-          });
+            </div>
+          `;
+          evts.appendChild(item);
+        });
 
         cell.appendChild(head);
         cell.appendChild(evts);
@@ -572,7 +565,6 @@
     }
 
     async function loadEventsForVisibleMonth(){
-      // Fetch range from calendar grid start -> end (6 weeks)
       const firstOfMonth = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
       const startDow = firstOfMonth.getDay();
       const start = new Date(firstOfMonth);
@@ -591,7 +583,7 @@
       const res = await fetch(API + "/events?" + qs.toString(), { credentials: "include" });
       const data = await res.json().catch(()=> ({}));
       if (!res.ok) {
-        setStatus(data.error || "Failed to load events", true);
+        setStatus((data.details || data.error || "Failed to load events"), true);
         events = [];
         return;
       }
@@ -607,7 +599,6 @@
         return;
       }
 
-      // Default times: if date provided, set start at 09:00 that day
       const now = new Date();
       const base = date ? new Date(date) : now;
 
@@ -634,7 +625,8 @@
       document.getElementById("evtModalWrap").style.display = "none";
     }
 
-    async function createEvent(){
+    // ✅ FIX: renamed from createEvent() to saveEvent()
+    async function saveEvent(){
       const calendar_id = document.getElementById("evtCalendar").value;
       const title = document.getElementById("evtTitle").value.trim();
       const location = document.getElementById("evtLocation").value.trim();
@@ -657,7 +649,7 @@
       let recurrence = null;
       if (repeat !== "none") {
         recurrence = {
-          freq: repeat, // daily/weekly/monthly
+          freq: repeat,
           interval: Number.isFinite(interval) && interval > 0 ? interval : 1,
           until: untilStr ? new Date(untilStr + "T23:59:59").getTime() : null,
           count: countStr ? Math.max(1, parseInt(countStr, 10)) : null
@@ -673,7 +665,7 @@
         all_day,
         start_ts: start,
         end_ts: end,
-        color: color && color !== "#000000" ? color : null,
+        color: (color && color !== "#000000") ? color : null,
         recurrence
       };
 
@@ -685,7 +677,7 @@
       });
 
       const data = await res.json().catch(()=> ({}));
-      if (!res.ok) { setStatus(data.error || "Failed to create event", true); return; }
+      if (!res.ok) { setStatus(data.error || data.details || "Failed to save event", true); return; }
 
       closeEventModal();
       await loadEventsForVisibleMonth();
@@ -693,12 +685,10 @@
       setStatus("Event saved.");
     }
 
-    // Expand recurrence locally for display only (simple freq/interval/until/count)
     function expandEventsIntoRange(raw, rangeStart, rangeEnd){
       const out = [];
 
       for (const e of raw) {
-        // If no recurrence, just include if overlaps day range
         if (!e.recurrence) {
           if (e.start_ts < rangeEnd && e.end_ts > rangeStart) out.push(e);
           continue;
@@ -716,29 +706,22 @@
         const until = Number.isFinite(r.until) ? r.until : null;
         const count = Number.isFinite(r.count) ? r.count : null;
 
-        // Generate occurrences starting from original event start, stepping by freq.
         let occStart = e.start_ts;
         let occEnd = e.end_ts;
         let n = 0;
-
-        // Safety cap to avoid infinite loops
         const HARD_CAP = 500;
 
         while (n < HARD_CAP) {
-          // stop if beyond range end
           if (occStart >= rangeEnd) break;
-          // stop if until exceeded
           if (until && occStart > until) break;
-          // stop if count reached
           if (count && n >= count) break;
 
           if (occStart < rangeEnd && occEnd > rangeStart) {
             out.push({ ...e, start_ts: occStart, end_ts: occEnd });
           }
 
-          // step
           const s = new Date(occStart);
-          const eDur = occEnd - occStart;
+          const dur = occEnd - occStart;
 
           if (freq === "daily") s.setDate(s.getDate() + interval);
           else if (freq === "weekly") s.setDate(s.getDate() + (7 * interval));
@@ -746,7 +729,7 @@
           else break;
 
           occStart = s.getTime();
-          occEnd = occStart + eDur;
+          occEnd = occStart + dur;
           n++;
         }
       }
@@ -768,7 +751,6 @@
     }
 
     function toLocalInput(date){
-      // yyyy-mm-ddThh:mm for datetime-local
       const pad = (n)=>String(n).padStart(2,"0");
       const y = date.getFullYear();
       const m = pad(date.getMonth()+1);
