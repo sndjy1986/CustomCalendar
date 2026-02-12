@@ -5,7 +5,7 @@ compatibility_date = "2026-02-12"
 [[d1_databases]]
 binding = "DB"
 database_name = "family_calendar_db"
-database_id = "YOUR_D1_DATABASE_ID"
+database_id = "23f53ecb-bb0d-41ae-8bc9-3e3966274af5"
 
 [vars]
 # Your Pages URL (or custom domain) for CORS:
@@ -16,4 +16,4 @@ JWT_SECRET = "saidtoreplacewithalongrandomstringsoijustthoughtaboutthis"
 
 # One-time bootstrap token to create your first user (admin).
 # Keep it secret. After you create your account, you can change it or ignore it.
-BOOTSTRAP_TOKEN = "whyisthiscalledabootstraptoken"
+BOOTSTRAP_TOKEN = "joeyisawesome"
