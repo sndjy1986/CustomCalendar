@@ -4,26 +4,55 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Family Calendar</title>
+
+  <!-- MDI Webfont -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/MaterialDesign-Webfont/7.4.47/css/materialdesignicons.min.css">
+
   <style>
     body { font-family: Arial, Helvetica, sans-serif; margin:0; background:#111; color:#f5f5f5; }
     header { display:flex; align-items:center; justify-content:space-between; padding:1rem; border-bottom:1px solid #2a2a2a; background:#141414; }
-    main { padding:1rem; max-width:900px; margin:0 auto; }
-    .row { display:flex; gap:.75rem; flex-wrap:wrap; margin:1rem 0; }
-    input { padding:.75rem; border-radius:10px; border:1px solid #444; background:#0f0f0f; color:#f5f5f5; }
+    main { padding:1rem; max-width:1100px; margin:0 auto; }
+    .row { display:flex; gap:.75rem; flex-wrap:wrap; margin:1rem 0; align-items:end; }
+    .col { display:flex; flex-direction:column; gap:.25rem; }
+    label { font-size:.85rem; opacity:.8; }
+    input, select, textarea {
+      padding:.7rem; border-radius:10px; border:1px solid #444; background:#0f0f0f; color:#f5f5f5;
+    }
+    textarea { min-height: 38px; resize: vertical; }
     button { padding:.75rem 1rem; border-radius:10px; border:0; cursor:pointer; font-weight:700; }
     .btn { background:#f5f5f5; color:#111; }
     .btn2 { background:#2a2a2a; color:#f5f5f5; border:1px solid #444; }
+    .btnDanger { background:#3a1b1b; color:#ffd6d6; border:1px solid #6a2a2a; }
+    .err { color:#ffb4b4; min-height:1.25rem; margin-top:.5rem; }
+    .muted { opacity:.75; }
+    .pill { display:inline-flex; align-items:center; gap:.4rem; padding:.3rem .6rem; border:1px solid #333; border-radius:999px; background:#161616; }
+    .split { display:grid; grid-template-columns: 1fr 1fr; gap:1rem; }
+    @media (max-width: 980px){ .split { grid-template-columns: 1fr; } }
+
     ul { list-style:none; padding:0; margin:0; }
-    li { padding:.75rem; border:1px solid #333; border-radius:12px; margin:.5rem 0; background:#161616; display:flex; justify-content:space-between; align-items:center; }
-    .tag { font-size:.85rem; opacity:.8; }
-    .err { color:#ffb4b4; min-height:1.25rem; }
+    .event {
+      padding:.85rem; border:1px solid #333; border-radius:14px; margin:.6rem 0;
+      background:#161616; display:flex; justify-content:space-between; gap:1rem;
+    }
+    .eventLeft { display:flex; gap:.75rem; align-items:flex-start; }
+    .iconBox {
+      width:36px; height:36px; border-radius:10px; display:grid; place-items:center;
+      border:1px solid #2a2a2a; background:#101010;
+      flex:0 0 auto;
+    }
+    .eventTitle { font-weight:800; }
+    .eventMeta { margin-top:.15rem; font-size:.9rem; opacity:.8; line-height:1.35; }
+    .eventMeta .mdi { opacity:.95; }
+    .eventRight { display:flex; gap:.5rem; align-items:center; flex:0 0 auto; }
+    hr { border:0; border-top:1px solid #2a2a2a; margin:1.25rem 0; }
+    .tiny { font-size:.85rem; opacity:.8; }
   </style>
 </head>
 <body>
   <header>
     <div>
       <strong>Family Calendar</strong>
-      <span class="tag" id="who"></span>
+      <span class="muted" id="who"></span>
     </div>
     <button class="btn2" onclick="logout()">Logout</button>
   </header>
@@ -31,85 +60,258 @@
   <main>
     <div class="err" id="err"></div>
 
-    <h2>Calendars</h2>
+    <div class="split">
+      <section>
+        <h2>Calendars</h2>
 
-    <div class="row">
-      <input id="name" placeholder="Calendar name (e.g., Joey, Brittney, Kid 1)" />
-      <input id="color" type="color" value="#00bfff" />
-      <button class="btn" onclick="createCalendar()">Create</button>
+        <div class="row">
+          <div class="col">
+            <label>Calendar</label>
+            <select id="calendarSelect" onchange="onCalendarChange()"></select>
+          </div>
+
+          <div class="col">
+            <label>New calendar name</label>
+            <input id="calName" placeholder="e.g., Arianna, Joey, Brittney" />
+          </div>
+
+          <div class="col">
+            <label>Color</label>
+            <input id="calColor" type="color" value="#00bfff" />
+          </div>
+
+          <button class="btn" onclick="createCalendar()">Create</button>
+        </div>
+
+        <div class="tiny">
+          Tip: events inherit the calendar color so your eyeballs can suffer less.
+        </div>
+      </section>
+
+      <section>
+        <h2>Quick Add</h2>
+        <div class="tiny muted">
+          Example: <span class="pill">2/12 10:30 Arianna Nurse Practitioner Appointment at 100 Perpetual Square</span>
+        </div>
+
+        <div class="row">
+          <div class="col" style="flex:1">
+            <label>Quick add text</label>
+            <input id="quickText" placeholder="MM/DD HH:MM Title at Location" />
+          </div>
+          <button class="btn" onclick="quickAdd()">Add</button>
+        </div>
+
+        <div class="tiny muted">
+          Assumptions: date is in your local timezone, year defaults to current year, duration defaults to 30 minutes unless it sees “- 11:30” style end time.
+        </div>
+      </section>
     </div>
 
-    <ul id="list"></ul>
+    <hr />
+
+    <section>
+      <h2>Add Event</h2>
+
+      <div class="row">
+        <div class="col" style="flex: 1">
+          <label>Title</label>
+          <input id="evTitle" placeholder="Nurse Practitioner Appointment" />
+        </div>
+
+        <div class="col" style="min-width: 220px">
+          <label>Location</label>
+          <input id="evLocation" placeholder="100 Perpetual Square" />
+        </div>
+
+        <div class="col" style="min-width: 190px">
+          <label>Icon (MDI class)</label>
+          <input id="evIcon" placeholder="mdi-stethoscope" value="mdi-calendar" />
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="col">
+          <label>Start</label>
+          <input id="evStart" type="datetime-local" />
+        </div>
+
+        <div class="col">
+          <label>End</label>
+          <input id="evEnd" type="datetime-local" />
+        </div>
+
+        <div class="col">
+          <label>All day</label>
+          <select id="evAllDay">
+            <option value="0" selected>No</option>
+            <option value="1">Yes</option>
+          </select>
+        </div>
+      </div>
+
+      <h3>Recurring</h3>
+      <div class="row">
+        <div class="col">
+          <label>Repeat</label>
+          <select id="recEnabled" onchange="toggleRecurrence()">
+            <option value="0" selected>No</option>
+            <option value="1">Yes</option>
+          </select>
+        </div>
+
+        <div class="col">
+          <label>Frequency</label>
+          <select id="recFreq">
+            <option value="DAILY">Daily</option>
+            <option value="WEEKLY" selected>Weekly</option>
+            <option value="MONTHLY">Monthly</option>
+          </select>
+        </div>
+
+        <div class="col">
+          <label>Interval</label>
+          <input id="recInterval" type="number" min="1" value="1" />
+        </div>
+
+        <div class="col">
+          <label>Weekly days</label>
+          <select id="recByday" multiple size="2">
+            <option value="MO">Mon</option>
+            <option value="TU">Tue</option>
+            <option value="WE">Wed</option>
+            <option value="TH">Thu</option>
+            <option value="FR">Fri</option>
+            <option value="SA">Sat</option>
+            <option value="SU">Sun</option>
+          </select>
+        </div>
+
+        <div class="col">
+          <label>Ends</label>
+          <select id="recEndMode">
+            <option value="NEVER" selected>Never</option>
+            <option value="COUNT">After N</option>
+            <option value="UNTIL">On date</option>
+          </select>
+        </div>
+
+        <div class="col">
+          <label>Count / Until</label>
+          <input id="recEndValue" placeholder="10 or 2026-12-31" />
+        </div>
+
+        <div class="col" style="flex:1">
+          <label>RRULE (generated)</label>
+          <input id="recRrule" readonly />
+        </div>
+      </div>
+
+      <div class="row">
+        <button class="btn" onclick="createEvent()">Create Event</button>
+        <span class="tiny muted">MDI examples: <span class="pill"><span class="mdi mdi-stethoscope"></span> mdi-stethoscope</span> <span class="pill"><span class="mdi mdi-school"></span> mdi-school</span> <span class="pill"><span class="mdi mdi-soccer"></span> mdi-soccer</span></span>
+      </div>
+    </section>
+
+    <hr />
+
+    <section>
+      <h2>Upcoming</h2>
+
+      <div class="row">
+        <div class="col">
+          <label>From</label>
+          <input id="rangeFrom" type="date" />
+        </div>
+        <div class="col">
+          <label>To</label>
+          <input id="rangeTo" type="date" />
+        </div>
+        <button class="btn2" onclick="loadEvents()">Refresh</button>
+      </div>
+
+      <ul id="eventsList"></ul>
+    </section>
   </main>
 
   <script>
     // CHANGE THIS:
     const API = "https://YOUR_WORKER_DOMAIN";
 
+    let calendars = [];
+    let selectedCalendar = null;
+
     async function init() {
       try {
-        // HARD RULE: if auth check fails for any reason, redirect to login
         const meRes = await fetch(API + "/auth/me", { credentials: "include" });
-
-        // If the browser blocked it or server returned weirdness, treat as logged out
-        if (!meRes.ok) {
-          location.href = "/login.html";
-          return;
-        }
-
+        if (!meRes.ok) { location.href = "/login.html"; return; }
         const meData = await meRes.json().catch(() => null);
-        if (!meData || !meData.logged_in) {
-          location.href = "/login.html";
-          return;
-        }
+        if (!meData || !meData.logged_in) { location.href = "/login.html"; return; }
 
         document.getElementById("who").textContent = " (" + meData.user.email + ")";
+
+        setDefaultDates();
+        setDefaultTimes();
+        toggleRecurrence();
+
         await loadCalendars();
-      } catch (e) {
-        // Network error / CORS / wrong API URL -> fail closed
+      } catch {
         location.href = "/login.html";
       }
+    }
+
+    function setDefaultDates() {
+      const now = new Date();
+      const from = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const to = new Date(from.getTime() + 14 * 24 * 60 * 60 * 1000);
+      document.getElementById("rangeFrom").value = toDateInput(from);
+      document.getElementById("rangeTo").value = toDateInput(to);
+    }
+
+    function setDefaultTimes() {
+      const now = new Date();
+      const start = new Date(now.getTime() + 60 * 60 * 1000);
+      start.setMinutes(0, 0, 0);
+      const end = new Date(start.getTime() + 30 * 60 * 1000);
+
+      document.getElementById("evStart").value = toDateTimeLocal(start);
+      document.getElementById("evEnd").value = toDateTimeLocal(end);
     }
 
     async function loadCalendars() {
       setErr("");
-
       const res = await fetch(API + "/calendars", { credentials: "include" });
-
-      if (res.status === 401 || res.status === 403) {
-        location.href = "/login.html";
-        return;
-      }
-
+      if (!res.ok) { if (res.status === 401) location.href="/login.html"; return; }
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setErr(data.error || "Failed to load calendars");
-        return;
-      }
+      calendars = data.calendars || [];
 
-      const list = document.getElementById("list");
-      list.innerHTML = "";
+      const sel = document.getElementById("calendarSelect");
+      sel.innerHTML = "";
 
-      (data.calendars || []).forEach(c => {
-        const li = document.createElement("li");
-        const left = document.createElement("div");
-        left.textContent = c.name;
-
-        const right = document.createElement("div");
-        right.textContent = c.color;
-        right.style.color = c.color;
-
-        li.appendChild(left);
-        li.appendChild(right);
-        list.appendChild(li);
+      calendars.forEach((c, idx) => {
+        const opt = document.createElement("option");
+        opt.value = c.id;
+        opt.textContent = c.name + " (" + c.color + ")";
+        opt.style.color = c.color;
+        sel.appendChild(opt);
       });
+
+      selectedCalendar = calendars[0] || null;
+      if (selectedCalendar) sel.value = selectedCalendar.id;
+
+      await loadEvents();
+    }
+
+    function onCalendarChange() {
+      const id = document.getElementById("calendarSelect").value;
+      selectedCalendar = calendars.find(c => c.id === id) || null;
+      loadEvents();
     }
 
     async function createCalendar() {
       setErr("");
-
-      const name = document.getElementById("name").value.trim();
-      const color = document.getElementById("color").value;
+      const name = document.getElementById("calName").value.trim();
+      const color = document.getElementById("calColor").value;
 
       const res = await fetch(API + "/calendars", {
         method: "POST",
@@ -118,31 +320,350 @@
         body: JSON.stringify({ name, color })
       });
 
-      if (res.status === 401 || res.status === 403) {
-        location.href = "/login.html";
-        return;
-      }
-
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setErr(data.error || "Failed to create calendar");
-        return;
-      }
+      if (!res.ok) { setErr(data.error || "Failed to create calendar"); return; }
 
-      document.getElementById("name").value = "";
+      document.getElementById("calName").value = "";
       await loadCalendars();
     }
 
+    function toggleRecurrence() {
+      const enabled = document.getElementById("recEnabled").value === "1";
+      const inputs = ["recFreq","recInterval","recByday","recEndMode","recEndValue"];
+      inputs.forEach(id => document.getElementById(id).disabled = !enabled);
+
+      updateRRule();
+      ["recFreq","recInterval","recEndMode","recEndValue","recByday"].forEach(id => {
+        document.getElementById(id).onchange = updateRRule;
+        document.getElementById(id).oninput = updateRRule;
+      });
+    }
+
+    function updateRRule() {
+      const enabled = document.getElementById("recEnabled").value === "1";
+      if (!enabled) {
+        document.getElementById("recRrule").value = "";
+        return;
+      }
+
+      const freq = document.getElementById("recFreq").value;
+      const interval = Math.max(1, parseInt(document.getElementById("recInterval").value || "1", 10));
+      const endMode = document.getElementById("recEndMode").value;
+      const endVal = (document.getElementById("recEndValue").value || "").trim();
+
+      let parts = [];
+      parts.push("FREQ=" + freq);
+      parts.push("INTERVAL=" + interval);
+
+      if (freq === "WEEKLY") {
+        const bydaySel = Array.from(document.getElementById("recByday").selectedOptions).map(o => o.value);
+        // If user didn't choose any days, we'll leave BYDAY out; server will default to base weekday.
+        if (bydaySel.length) parts.push("BYDAY=" + bydaySel.join(","));
+      }
+
+      if (endMode === "COUNT") {
+        const n = parseInt(endVal, 10);
+        if (Number.isFinite(n) && n > 0) parts.push("COUNT=" + n);
+      }
+
+      if (endMode === "UNTIL") {
+        // expect YYYY-MM-DD
+        const m = endVal.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (m) {
+          const y = m[1], mo = m[2], d = m[3];
+          parts.push("UNTIL=" + y + mo + d); // date-only UNTIL
+        }
+      }
+
+      document.getElementById("recRrule").value = parts.join(";");
+    }
+
+    async function createEvent() {
+      setErr("");
+      if (!selectedCalendar) { setErr("Create/select a calendar first"); return; }
+
+      const title = document.getElementById("evTitle").value.trim();
+      const location = document.getElementById("evLocation").value.trim();
+      const icon = document.getElementById("evIcon").value.trim();
+
+      const startStr = document.getElementById("evStart").value;
+      const endStr = document.getElementById("evEnd").value;
+      const allDay = document.getElementById("evAllDay").value === "1";
+
+      if (!title) { setErr("Title required"); return; }
+      if (!startStr || !endStr) { setErr("Start and end required"); return; }
+
+      const start_ts = new Date(startStr).getTime();
+      const end_ts = new Date(endStr).getTime();
+      if (!Number.isFinite(start_ts) || !Number.isFinite(end_ts) || end_ts <= start_ts) {
+        setErr("Invalid start/end");
+        return;
+      }
+
+      const rrule = document.getElementById("recRrule").value.trim() || null;
+
+      const res = await fetch(API + "/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          calendar_id: selectedCalendar.id,
+          title,
+          location,
+          icon,
+          start_ts,
+          end_ts,
+          all_day: allDay,
+          rrule
+        })
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setErr(data.error || "Failed to create event"); return; }
+
+      document.getElementById("evTitle").value = "";
+      document.getElementById("evLocation").value = "";
+      updateRRule();
+      await loadEvents();
+    }
+
+    async function loadEvents() {
+      setErr("");
+      if (!selectedCalendar) return;
+
+      const fromD = document.getElementById("rangeFrom").value;
+      const toD = document.getElementById("rangeTo").value;
+      if (!fromD || !toD) { setErr("Pick from/to"); return; }
+
+      const from = new Date(fromD + "T00:00:00").getTime();
+      const to = new Date(toD + "T23:59:59").getTime();
+
+      const url = API + "/events?calendar_id=" + encodeURIComponent(selectedCalendar.id)
+        + "&from=" + from + "&to=" + to + "&expand=1";
+
+      const res = await fetch(url, { credentials: "include" });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        if (res.status === 401) location.href="/login.html";
+        setErr(data.error || "Failed to load events");
+        return;
+      }
+
+      renderEvents(data.occurrences || []);
+    }
+
+    function renderEvents(occurrences) {
+      const list = document.getElementById("eventsList");
+      list.innerHTML = "";
+
+      const calColor = selectedCalendar?.color || "#f5f5f5";
+
+      occurrences.forEach(o => {
+        const li = document.createElement("li");
+        li.className = "event";
+
+        const left = document.createElement("div");
+        left.className = "eventLeft";
+
+        const iconBox = document.createElement("div");
+        iconBox.className = "iconBox";
+        iconBox.style.borderColor = calColor;
+
+        const iconSpan = document.createElement("span");
+        iconSpan.className = "mdi " + (o.icon ? o.icon : "mdi-calendar");
+        iconSpan.style.color = calColor;
+
+        iconBox.appendChild(iconSpan);
+
+        const textBox = document.createElement("div");
+
+        const title = document.createElement("div");
+        title.className = "eventTitle";
+        title.textContent = o.title;
+
+        const meta = document.createElement("div");
+        meta.className = "eventMeta";
+
+        const when = formatWhen(o.start_ts, o.end_ts, o.all_day);
+        const loc = o.location ? (" • " + o.location) : "";
+        const recur = o.rrule ? (" • Recurring") : "";
+
+        meta.textContent = when + loc + recur;
+
+        textBox.appendChild(title);
+        textBox.appendChild(meta);
+
+        left.appendChild(iconBox);
+        left.appendChild(textBox);
+
+        const right = document.createElement("div");
+        right.className = "eventRight";
+
+        const del = document.createElement("button");
+        del.className = "btnDanger";
+        del.textContent = "Delete";
+        del.onclick = () => deleteEvent(o.event_id);
+
+        right.appendChild(del);
+
+        li.appendChild(left);
+        li.appendChild(right);
+
+        list.appendChild(li);
+      });
+
+      if (!occurrences.length) {
+        const empty = document.createElement("div");
+        empty.className = "muted";
+        empty.textContent = "No events in this range.";
+        list.appendChild(empty);
+      }
+    }
+
+    async function deleteEvent(id) {
+      // Deletes the series/event (not a single occurrence). Simple on purpose.
+      const res = await fetch(API + "/events", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ id })
+      });
+      if (!res.ok && res.status === 401) location.href="/login.html";
+      await loadEvents();
+    }
+
+    function quickAdd() {
+      setErr("");
+      if (!selectedCalendar) { setErr("Create/select a calendar first"); return; }
+
+      const txt = (document.getElementById("quickText").value || "").trim();
+      if (!txt) return;
+
+      const parsed = parseQuickAdd(txt);
+      if (!parsed) { setErr("Could not parse. Use: MM/DD HH:MM Title at Location"); return; }
+
+      // Fill the form and create
+      document.getElementById("evTitle").value = parsed.title;
+      document.getElementById("evLocation").value = parsed.location || "";
+      document.getElementById("evIcon").value = guessIcon(parsed.title, parsed.location);
+
+      document.getElementById("evStart").value = toDateTimeLocal(new Date(parsed.start_ts));
+      document.getElementById("evEnd").value = toDateTimeLocal(new Date(parsed.end_ts));
+
+      document.getElementById("recEnabled").value = "0";
+      toggleRecurrence();
+
+      createEvent();
+      document.getElementById("quickText").value = "";
+    }
+
+    function parseQuickAdd(s) {
+      // Supports:
+      // 1) "2/12 10:30 Title at Location"
+      // 2) "2/12 10:30-11:30 Title at Location"
+      // Optional year: "2026-02-12 10:30 ..."
+      const now = new Date();
+      let m = s.match(/^(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{2})(?:\s*-\s*(\d{1,2}):(\d{2}))?\s+(.+)$/);
+      let date;
+      let startH, startM, endH, endM, rest;
+
+      if (m) {
+        const mm = parseInt(m[1], 10) - 1;
+        const dd = parseInt(m[2], 10);
+        startH = parseInt(m[3], 10);
+        startM = parseInt(m[4], 10);
+        endH = m[5] ? parseInt(m[5], 10) : null;
+        endM = m[6] ? parseInt(m[6], 10) : null;
+        rest = m[7].trim();
+
+        date = new Date(now.getFullYear(), mm, dd, startH, startM, 0, 0);
+      } else {
+        m = s.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{1,2}):(\d{2})(?:\s*-\s*(\d{1,2}):(\d{2}))?\s+(.+)$/);
+        if (!m) return null;
+        const y = parseInt(m[1], 10);
+        const mo = parseInt(m[2], 10) - 1;
+        const dd = parseInt(m[3], 10);
+        startH = parseInt(m[4], 10);
+        startM = parseInt(m[5], 10);
+        endH = m[6] ? parseInt(m[6], 10) : null;
+        endM = m[7] ? parseInt(m[7], 10) : null;
+        rest = m[8].trim();
+
+        date = new Date(y, mo, dd, startH, startM, 0, 0);
+      }
+
+      // split title/location on " at "
+      let title = rest;
+      let location = "";
+      const atIdx = rest.toLowerCase().lastIndexOf(" at ");
+      if (atIdx !== -1) {
+        title = rest.slice(0, atIdx).trim();
+        location = rest.slice(atIdx + 4).trim();
+      }
+
+      const start_ts = date.getTime();
+      let end_ts;
+
+      if (endH != null && endM != null) {
+        const endDate = new Date(date.getTime());
+        endDate.setHours(endH, endM, 0, 0);
+        end_ts = endDate.getTime();
+        if (end_ts <= start_ts) end_ts = start_ts + 30 * 60 * 1000; // fallback
+      } else {
+        end_ts = start_ts + 30 * 60 * 1000;
+      }
+
+      if (!title) return null;
+
+      return { title, location, start_ts, end_ts };
+    }
+
+    function guessIcon(title, location) {
+      const t = (title + " " + (location || "")).toLowerCase();
+      if (t.includes("doctor") || t.includes("nurse") || t.includes("appointment") || t.includes("clinic")) return "mdi-stethoscope";
+      if (t.includes("school") || t.includes("class")) return "mdi-school";
+      if (t.includes("soccer")) return "mdi-soccer";
+      if (t.includes("dentist")) return "mdi-tooth";
+      if (t.includes("birthday")) return "mdi-cake-variant";
+      return "mdi-calendar";
+    }
+
+    function formatWhen(start_ts, end_ts, allDay) {
+      const s = new Date(start_ts);
+      const e = new Date(end_ts);
+      if (allDay) return s.toLocaleDateString();
+
+      const sameDay = s.toDateString() === e.toDateString();
+      if (sameDay) {
+        return s.toLocaleDateString() + " " + s.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})
+          + "–" + e.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+      }
+      return s.toLocaleString() + " → " + e.toLocaleString();
+    }
+
+    function toDateInput(d) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const da = String(d.getDate()).padStart(2, "0");
+      return `${y}-${m}-${da}`;
+    }
+
+    function toDateTimeLocal(d) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const da = String(d.getDate()).padStart(2, "0");
+      const hh = String(d.getHours()).padStart(2, "0");
+      const mm = String(d.getMinutes()).padStart(2, "0");
+      return `${y}-${m}-${da}T${hh}:${mm}`;
+    }
+
     async function logout() {
-      try {
-        await fetch(API + "/auth/logout", { method: "POST", credentials: "include" });
-      } catch {}
+      try { await fetch(API + "/auth/logout", { method: "POST", credentials: "include" }); } catch {}
       location.href = "/login.html";
     }
 
-    function setErr(t) {
-      document.getElementById("err").textContent = t;
-    }
+    function setErr(t) { document.getElementById("err").textContent = t; }
 
     init();
   </script>
