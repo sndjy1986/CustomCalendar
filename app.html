@@ -47,25 +47,40 @@
     const API = "https://YOUR_WORKER_DOMAIN";
 
     async function init() {
-      // Confirm session
-      const me = await fetch(API + "/auth/me", { credentials: "include" });
-      const meData = await me.json().catch(() => ({}));
-      if (!meData.logged_in) {
-        location.href = "/login.html";
-        return;
-      }
-      document.getElementById("who").textContent = " (" + meData.user.email + ")";
+      try {
+        // HARD RULE: if auth check fails for any reason, redirect to login
+        const meRes = await fetch(API + "/auth/me", { credentials: "include" });
 
-      await loadCalendars();
+        // If the browser blocked it or server returned weirdness, treat as logged out
+        if (!meRes.ok) {
+          location.href = "/login.html";
+          return;
+        }
+
+        const meData = await meRes.json().catch(() => null);
+        if (!meData || !meData.logged_in) {
+          location.href = "/login.html";
+          return;
+        }
+
+        document.getElementById("who").textContent = " (" + meData.user.email + ")";
+        await loadCalendars();
+      } catch (e) {
+        // Network error / CORS / wrong API URL -> fail closed
+        location.href = "/login.html";
+      }
     }
 
     async function loadCalendars() {
       setErr("");
+
       const res = await fetch(API + "/calendars", { credentials: "include" });
+
       if (res.status === 401 || res.status === 403) {
         location.href = "/login.html";
         return;
       }
+
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setErr(data.error || "Failed to load calendars");
@@ -92,6 +107,7 @@
 
     async function createCalendar() {
       setErr("");
+
       const name = document.getElementById("name").value.trim();
       const color = document.getElementById("color").value;
 
@@ -101,6 +117,11 @@
         credentials: "include",
         body: JSON.stringify({ name, color })
       });
+
+      if (res.status === 401 || res.status === 403) {
+        location.href = "/login.html";
+        return;
+      }
 
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -113,7 +134,9 @@
     }
 
     async function logout() {
-      await fetch(API + "/auth/logout", { method: "POST", credentials: "include" });
+      try {
+        await fetch(API + "/auth/logout", { method: "POST", credentials: "include" });
+      } catch {}
       location.href = "/login.html";
     }
 
