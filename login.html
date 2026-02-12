@@ -87,38 +87,42 @@
       }
     }
 
-    async function bootstrap() {
-      setMsg("");
-      try {
-        const email = document.getElementById("email").value.trim();
-        const password = document.getElementById("password").value;
-        const bootstrap_token = document.getElementById("bootstrap").value;
+async function bootstrap() {
+  setMsg("");
+  try {
+    const email = document.getElementById("email").value.trim();
+    const password = document.getElementById("password").value;
+    const bootstrap_token = document.getElementById("bootstrap").value;
 
-        const res = await fetch(API + "/auth/bootstrap", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ email, password, bootstrap_token })
-        });
+    console.log("SENDING bootstrap_token length:", bootstrap_token.length);
+    console.log("SENDING bootstrap_token raw:", JSON.stringify(bootstrap_token));
 
-        const text = await res.text();
-        console.log("BOOTSTRAP status:", res.status, "body:", text);
+    const res = await fetch(API + "/auth/bootstrap", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ email, password, bootstrap_token })
+    });
 
-        let data = {};
-        try { data = JSON.parse(text); } catch {}
+    const text = await res.text();
+    console.log("BOOTSTRAP status:", res.status, "body:", text);
 
-        if (!res.ok) {
-          setMsg("Bootstrap failed:\n" + (data.error || text || ("HTTP " + res.status)));
-          return;
-        }
+    let data = {};
+    try { data = JSON.parse(text); } catch {}
 
-        setMsg("Account created. Redirecting...", true);
-        location.href = "/app.html";
-      } catch (e) {
-        console.error(e);
-        setMsg("Request failed (network/CORS/API URL):\n" + e.message);
-      }
+    if (!res.ok) {
+      setMsg("Bootstrap failed:\n" + (data.error || text || ("HTTP " + res.status)));
+      return;
     }
+
+    setMsg("Account created. Redirecting...", true);
+    location.href = "/app.html";
+  } catch (e) {
+    console.error(e);
+    setMsg("Request failed (network/CORS/API URL):\n" + e.message);
+  }
+}
+
 
     function setMsg(t, ok=false) {
       const el = document.getElementById("msg");
