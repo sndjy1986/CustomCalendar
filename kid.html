@@ -60,6 +60,8 @@
       <button class="ghost" onclick="location.href='/index.html'"><i class="mdi mdi-calendar"></i> Calendar</button>
       <button class="ghost" onclick="openChoreModal()"><i class="mdi mdi-plus"></i> Add chore</button>
       <button class="ghost" onclick="openGiftModal()"><i class="mdi mdi-gift"></i> Add gift cards</button>
+      <button class="ghost" onclick="openAddKidModal()"><i class="mdi mdi-account-plus"></i> Add kid</button>
+      <button class="ghost" onclick="openEditKidModal()"><i class="mdi mdi-account-edit"></i> Edit kid</button>
       <button class="danger" onclick="logout()"><i class="mdi mdi-logout"></i> Logout</button>
     </div>
   </div>
@@ -144,6 +146,47 @@
     </div>
     <div class="row" style="justify-content:flex-end; margin-top:10px;">
       <button class="primary" onclick="addGiftCards()">Add codes</button>
+    </div>
+  </div>
+</div>
+
+
+<div class="modalWrap" id="addKidModalWrap" onclick="if(event.target.id==='addKidModalWrap') closeAddKidModal()">
+  <div class="modal">
+    <div class="modalHeader">
+      <h2>Add Kid</h2>
+      <button class="ghost" onclick="closeAddKidModal()"><i class="mdi mdi-close"></i></button>
+    </div>
+    <div class="col">
+      <label>Name</label>
+      <input id="addKidName" placeholder="Arianna" />
+    </div>
+    <div class="col" style="margin-top:10px;">
+      <label>Avatar icon (optional MDI class)</label>
+      <input id="addKidAvatar" placeholder="mdi-account-star" />
+    </div>
+    <div class="row" style="justify-content:flex-end; margin-top:10px;">
+      <button class="primary" onclick="createKid()">Create kid</button>
+    </div>
+  </div>
+</div>
+
+<div class="modalWrap" id="editKidModalWrap" onclick="if(event.target.id==='editKidModalWrap') closeEditKidModal()">
+  <div class="modal">
+    <div class="modalHeader">
+      <h2>Edit Kid</h2>
+      <button class="ghost" onclick="closeEditKidModal()"><i class="mdi mdi-close"></i></button>
+    </div>
+    <div class="col">
+      <label>Name</label>
+      <input id="editKidName" placeholder="Arianna" />
+    </div>
+    <div class="col" style="margin-top:10px;">
+      <label>Avatar icon (optional MDI class)</label>
+      <input id="editKidAvatar" placeholder="mdi-account-star" />
+    </div>
+    <div class="row" style="justify-content:flex-end; margin-top:10px;">
+      <button class="primary" onclick="saveKidEdit()">Save changes</button>
     </div>
   </div>
 </div>
@@ -403,6 +446,63 @@
     document.getElementById('giftCodes').value = '';
     closeGiftModal();
     setStatus(`Added ${data.inserted || codes.length} gift card(s).`);
+  }
+
+
+  function openAddKidModal(){
+    document.getElementById('addKidName').value = '';
+    document.getElementById('addKidAvatar').value = '';
+    document.getElementById('addKidModalWrap').style.display = 'flex';
+  }
+  function closeAddKidModal(){ document.getElementById('addKidModalWrap').style.display = 'none'; }
+
+  async function createKid(){
+    const name = document.getElementById('addKidName').value.trim();
+    const avatar = document.getElementById('addKidAvatar').value.trim();
+    if (!name) { setStatus('Kid name is required.', true); return; }
+
+    const { res, data } = await apiFetch('/kids', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, avatar })
+    });
+
+    if (!res.ok) { setStatus(data.error || 'Failed to add kid', true); return; }
+    closeAddKidModal();
+    await loadKids();
+    selectedKidId = data.id || selectedKidId;
+    if (selectedKidId) document.getElementById('kidSelect').value = selectedKidId;
+    setStatus('Kid added.');
+    await refreshAll();
+  }
+
+  function openEditKidModal(){
+    if (!selectedKidId) { setStatus('Select a kid first.', true); return; }
+    const kid = kids.find(k => k.id === selectedKidId);
+    document.getElementById('editKidName').value = kid?.name || '';
+    document.getElementById('editKidAvatar').value = kid?.avatar || '';
+    document.getElementById('editKidModalWrap').style.display = 'flex';
+  }
+  function closeEditKidModal(){ document.getElementById('editKidModalWrap').style.display = 'none'; }
+
+  async function saveKidEdit(){
+    if (!selectedKidId) { setStatus('Select a kid first.', true); return; }
+    const name = document.getElementById('editKidName').value.trim();
+    const avatar = document.getElementById('editKidAvatar').value.trim();
+    if (!name) { setStatus('Kid name is required.', true); return; }
+
+    const { res, data } = await apiFetch('/kids/' + encodeURIComponent(selectedKidId), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, avatar })
+    });
+
+    if (!res.ok) { setStatus(data.error || 'Failed to update kid profile', true); return; }
+    closeEditKidModal();
+    await loadKids();
+    if (selectedKidId) document.getElementById('kidSelect').value = selectedKidId;
+    setStatus('Kid profile updated.');
+    await refreshAll();
   }
 
   async function logout(){
