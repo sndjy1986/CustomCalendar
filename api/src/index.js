@@ -4,13 +4,14 @@ const PBKDF2_ITERATIONS = 100000;
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    const pathname = normalizePath(url.pathname);
 
     if (request.method === "OPTIONS") {
       return cors(env, request, new Response(null, { status: 204 }));
     }
 
     try {
-      if (url.pathname === "/debug/config") {
+      if (pathname === "/debug/config") {
         const allowed = getAllowedOrigins(env);
         return cors(env, request, json({
           ok: true,
@@ -28,26 +29,26 @@ export default {
         }));
       }
 
-      if (url.pathname === "/health") {
+      if (pathname === "/health") {
         return cors(env, request, json({ ok: true, build_id: BUILD_ID, ts: Date.now() }));
       }
 
       // AUTH
-      if (url.pathname === "/auth/bootstrap" && request.method === "POST") {
+      if (pathname === "/auth/bootstrap" && request.method === "POST") {
         return cors(env, request, await handleBootstrap(request, env));
       }
-      if (url.pathname === "/auth/login" && request.method === "POST") {
+      if (pathname === "/auth/login" && request.method === "POST") {
         return cors(env, request, await handleLogin(request, env));
       }
-      if (url.pathname === "/auth/logout" && request.method === "POST") {
+      if (pathname === "/auth/logout" && request.method === "POST") {
         return cors(env, request, handleLogout(env));
       }
-      if (url.pathname === "/auth/me" && request.method === "GET") {
+      if (pathname === "/auth/me" && request.method === "GET") {
         return cors(env, request, await handleMe(request, env));
       }
 
       // CALENDARS (protected)
-      if (url.pathname === "/calendars" && request.method === "GET") {
+      if (pathname === "/calendars" && request.method === "GET") {
         const user = await requireAuth(request, env);
         const { results } = await env.DB.prepare(
           "SELECT id, name, color, created_at FROM calendars ORDER BY created_at DESC"
@@ -55,7 +56,7 @@ export default {
         return cors(env, request, json({ user, calendars: results, build_id: BUILD_ID }));
       }
 
-      if (url.pathname === "/calendars" && request.method === "POST") {
+      if (pathname === "/calendars" && request.method === "POST") {
         const user = await requireAuth(request, env);
         const body = await safeJson(request);
 
@@ -74,7 +75,7 @@ export default {
       }
 
       // EVENTS (protected)
-      if (url.pathname === "/events" && request.method === "GET") {
+      if (pathname === "/events" && request.method === "GET") {
         const user = await requireAuth(request, env);
 
         const start = parseInt(url.searchParams.get("start") || "", 10);
@@ -109,7 +110,7 @@ export default {
         return cors(env, request, json({ ok: true, user, events: results, build_id: BUILD_ID }));
       }
 
-      if (url.pathname === "/events" && request.method === "POST") {
+      if (pathname === "/events" && request.method === "POST") {
         const user = await requireAuth(request, env);
         const body = await safeJson(request);
 
@@ -164,7 +165,7 @@ export default {
       }
 
       // KIDS (protected)
-      if (url.pathname === "/kids" && request.method === "GET") {
+      if (pathname === "/kids" && request.method === "GET") {
         const user = await requireAuth(request, env);
         const { results } = await env.DB.prepare(
           "SELECT id, name, avatar, created_at FROM kids WHERE created_by = ? ORDER BY created_at DESC"
@@ -173,7 +174,7 @@ export default {
         return cors(env, request, json({ ok: true, kids: results, build_id: BUILD_ID }));
       }
 
-      if (url.pathname === "/kids" && request.method === "POST") {
+      if (pathname === "/kids" && request.method === "POST") {
         const user = await requireAuth(request, env);
         const body = await safeJson(request);
 
@@ -192,9 +193,9 @@ export default {
         return cors(env, request, json({ ok: true, id, build_id: BUILD_ID }));
       }
 
-      if (/^\/kids\/[^/]+$/.test(url.pathname) && request.method === "PATCH") {
+      if (/^\/kids\/[^/]+$/.test(pathname) && request.method === "PATCH") {
         const user = await requireAuth(request, env);
-        const id = url.pathname.split("/")[2] || "";
+        const id = pathname.split("/")[2] || "";
         const body = await safeJson(request);
 
         if (!id) return cors(env, request, json({ error: "id required", build_id: BUILD_ID }, 400));
@@ -218,7 +219,7 @@ export default {
       }
 
       // CHORES (protected)
-      if (url.pathname === "/chores" && request.method === "GET") {
+      if (pathname === "/chores" && request.method === "GET") {
         const user = await requireAuth(request, env);
 
         const kid_id = normalize(url.searchParams.get("kid_id"));
@@ -262,7 +263,7 @@ export default {
         return cors(env, request, json({ ok: true, chores: results, build_id: BUILD_ID }));
       }
 
-      if (url.pathname === "/chores" && request.method === "POST") {
+      if (pathname === "/chores" && request.method === "POST") {
         const user = await requireAuth(request, env);
         const body = await safeJson(request);
 
@@ -294,9 +295,9 @@ export default {
         return cors(env, request, json({ ok: true, id, build_id: BUILD_ID }));
       }
 
-      if (url.pathname.startsWith("/chores/") && request.method === "PUT") {
+      if (pathname.startsWith("/chores/") && request.method === "PUT") {
         const user = await requireAuth(request, env);
-        const id = url.pathname.split("/")[2] || "";
+        const id = pathname.split("/")[2] || "";
         const body = await safeJson(request);
         const nextStatus = normalize(body?.status).toLowerCase();
 
@@ -341,9 +342,9 @@ export default {
       }
 
       // Kid landing summary (protected)
-      if (/^\/kids\/[^/]+\/landing$/.test(url.pathname) && request.method === "GET") {
+      if (/^\/kids\/[^/]+\/landing$/.test(pathname) && request.method === "GET") {
         const user = await requireAuth(request, env);
-        const id = url.pathname.split("/")[2] || "";
+        const id = pathname.split("/")[2] || "";
 
         if (!id) return cors(env, request, json({ error: "id required", build_id: BUILD_ID }, 400));
 
@@ -390,7 +391,7 @@ export default {
       }
 
       // Gift card inventory + issuance (protected)
-      if (url.pathname === "/gift-cards" && request.method === "POST") {
+      if (pathname === "/gift-cards" && request.method === "POST") {
         const user = await requireAuth(request, env);
         const body = await safeJson(request);
 
@@ -415,7 +416,7 @@ export default {
         return cors(env, request, json({ ok: true, inserted: codes.length, build_id: BUILD_ID }));
       }
 
-      if (url.pathname === "/rewards/issue" && request.method === "POST") {
+      if (pathname === "/rewards/issue" && request.method === "POST") {
         const user = await requireAuth(request, env);
         const body = await safeJson(request);
 
@@ -465,9 +466,9 @@ export default {
       }
 
       // ✅ UPDATE EVENT
-      if (url.pathname.startsWith("/events/") && request.method === "PUT") {
+      if (pathname.startsWith("/events/") && request.method === "PUT") {
         const user = await requireAuth(request, env);
-        const id = url.pathname.split("/")[2] || "";
+        const id = pathname.split("/")[2] || "";
         const body = await safeJson(request);
 
         if (!id) return cors(env, request, json({ error: "id required", build_id: BUILD_ID }, 400));
@@ -520,9 +521,9 @@ export default {
       }
 
       // ✅ DELETE EVENT
-      if (url.pathname.startsWith("/events/") && request.method === "DELETE") {
+      if (pathname.startsWith("/events/") && request.method === "DELETE") {
         const user = await requireAuth(request, env);
-        const id = url.pathname.split("/")[2] || "";
+        const id = pathname.split("/")[2] || "";
 
         if (!id) return cors(env, request, json({ error: "id required", build_id: BUILD_ID }, 400));
 
@@ -546,6 +547,13 @@ export default {
     }
   },
 };
+
+
+function normalizePath(path) {
+  if (!path) return "/";
+  const trimmed = path.replace(/\/+$, "");
+  return trimmed || "/";
+}
 
 /* =======================
    CORS
