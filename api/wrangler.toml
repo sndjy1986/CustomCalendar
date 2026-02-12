@@ -6,3 +6,14 @@ compatibility_date = "2026-02-12"
 binding = "DB"
 database_name = "family_calendar_db"
 database_id = "YOUR_D1_DATABASE_ID"
+
+[vars]
+# Your Pages URL (or custom domain) for CORS:
+FRONTEND_ORIGIN = "https://cal.sndjy.us"
+
+# Used to sign session JWTs (make it long and random)
+JWT_SECRET = "saidtoreplacewithalongrandomstringsoijustthoughtaboutthis"
+
+# One-time bootstrap token to create your first user (admin).
+# Keep it secret. After you create your account, you can change it or ignore it.
+BOOTSTRAP_TOKEN = "whyisthiscalledabootstraptoken"
