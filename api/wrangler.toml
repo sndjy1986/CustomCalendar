@@ -2,3 +2,7 @@ name = "family-calendar-api"
 main = "src/index.js"
 compatibility_date = "2026-02-12"
 
+[[d1_databases]]
+binding = "DB"
+database_name = "family_calendar_db"
+database_id = "YOUR_D1_DATABASE_ID"
