@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Family Calendar</title>
+  <style>
+    body { font-family: Arial, Helvetica, sans-serif; margin:0; background:#111; color:#f5f5f5; }
+    header { display:flex; align-items:center; justify-content:space-between; padding:1rem; border-bottom:1px solid #2a2a2a; background:#141414; }
+    main { padding:1rem; max-width:900px; margin:0 auto; }
+    .row { display:flex; gap:.75rem; flex-wrap:wrap; margin:1rem 0; }
+    input { padding:.75rem; border-radius:10px; border:1px solid #444; background:#0f0f0f; color:#f5f5f5; }
+    button { padding:.75rem 1rem; border-radius:10px; border:0; cursor:pointer; font-weight:700; }
+    .btn { background:#f5f5f5; color:#111; }
+    .btn2 { background:#2a2a2a; color:#f5f5f5; border:1px solid #444; }
+    ul { list-style:none; padding:0; margin:0; }
+    li { padding:.75rem; border:1px solid #333; border-radius:12px; margin:.5rem 0; background:#161616; display:flex; justify-content:space-between; align-items:center; }
+    .tag { font-size:.85rem; opacity:.8; }
+    .err { color:#ffb4b4; min-height:1.25rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <strong>Family Calendar</strong>
+      <span class="tag" id="who"></span>
+    </div>
+    <button class="btn2" onclick="logout()">Logout</button>
+  </header>
+
+  <main>
+    <div class="err" id="err"></div>
+
+    <h2>Calendars</h2>
+
+    <div class="row">
+      <input id="name" placeholder="Calendar name (e.g., Joey, Brittney, Kid 1)" />
+      <input id="color" type="color" value="#00bfff" />
+      <button class="btn" onclick="createCalendar()">Create</button>
+    </div>
+
+    <ul id="list"></ul>
+  </main>
+
+  <script>
+    // CHANGE THIS:
+    const API = "https://YOUR_WORKER_DOMAIN";
+
+    async function init() {
+      // Confirm session
+      const me = await fetch(API + "/auth/me", { credentials: "include" });
+      const meData = await me.json().catch(() => ({}));
+      if (!meData.logged_in) {
+        location.href = "/login.html";
+        return;
+      }
+      document.getElementById("who").textContent = " (" + meData.user.email + ")";
+
+      await loadCalendars();
+    }
+
+    async function loadCalendars() {
+      setErr("");
+      const res = await fetch(API + "/calendars", { credentials: "include" });
+      if (res.status === 401 || res.status === 403) {
+        location.href = "/login.html";
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setErr(data.error || "Failed to load calendars");
+        return;
+      }
+
+      const list = document.getElementById("list");
+      list.innerHTML = "";
+
+      (data.calendars || []).forEach(c => {
+        const li = document.createElement("li");
+        const left = document.createElement("div");
+        left.textContent = c.name;
+
+        const right = document.createElement("div");
+        right.textContent = c.color;
+        right.style.color = c.color;
+
+        li.appendChild(left);
+        li.appendChild(right);
+        list.appendChild(li);
+      });
+    }
+
+    async function createCalendar() {
+      setErr("");
+      const name = document.getElementById("name").value.trim();
+      const color = document.getElementById("color").value;
+
+      const res = await fetch(API + "/calendars", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ name, color })
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setErr(data.error || "Failed to create calendar");
+        return;
+      }
+
+      document.getElementById("name").value = "";
+      await loadCalendars();
+    }
+
+    async function logout() {
+      await fetch(API + "/auth/logout", { method: "POST", credentials: "include" });
+      location.href = "/login.html";
+    }
+
+    function setErr(t) {
+      document.getElementById("err").textContent = t;
+    }
+
+    init();
+  </script>
+</body>
+</html>
