@@ -2,7 +2,6 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
-    // Handle CORS preflight
     if (request.method === "OPTIONS") {
       return cors(env, new Response(null, { status: 204 }));
     }
@@ -13,24 +12,21 @@ export default {
         return cors(env, json({ ok: true, ts: Date.now() }));
       }
 
-      // --- AUTH ---
+      // AUTH
       if (url.pathname === "/auth/bootstrap" && request.method === "POST") {
         return cors(env, await handleBootstrap(request, env));
       }
-
       if (url.pathname === "/auth/login" && request.method === "POST") {
         return cors(env, await handleLogin(request, env));
       }
-
       if (url.pathname === "/auth/logout" && request.method === "POST") {
         return cors(env, handleLogout(env));
       }
-
       if (url.pathname === "/auth/me" && request.method === "GET") {
         return cors(env, await handleMe(request, env));
       }
 
-      // --- PROTECTED API ---
+      // PROTECTED: calendars
       if (url.pathname === "/calendars" && request.method === "GET") {
         const user = await requireAuth(request, env);
 
@@ -38,10 +34,7 @@ export default {
           "SELECT id, name, color, created_at FROM calendars ORDER BY created_at DESC"
         ).all();
 
-        return cors(
-          env,
-          json({ user: { id: user.sub, email: user.email }, calendars: results })
-        );
+        return cors(env, json({ user: { id: user.sub, email: user.email }, calendars: results }));
       }
 
       if (url.pathname === "/calendars" && request.method === "POST") {
@@ -56,16 +49,152 @@ export default {
 
         await env.DB.prepare(
           "INSERT INTO calendars (id, name, color, created_by, created_at) VALUES (?, ?, ?, ?, ?)"
-        )
-          .bind(id, body.name, color, user.sub, now)
-          .run();
+        ).bind(id, body.name, color, user.sub, now).run();
 
         return cors(env, json({ id, name: body.name, color, created_by: user.sub, created_at: now }));
       }
 
+      // PROTECTED: events
+      if (url.pathname === "/events" && request.method === "GET") {
+        const user = await requireAuth(request, env);
+
+        const calendarId = url.searchParams.get("calendar_id");
+        const from = parseInt(url.searchParams.get("from") || "0", 10);
+        const to = parseInt(url.searchParams.get("to") || "0", 10);
+        const expand = url.searchParams.get("expand") === "1";
+
+        if (!calendarId) return cors(env, json({ error: "calendar_id required" }, 400));
+        if (!from || !to || to <= from) {
+          return cors(env, json({ error: "Valid from/to required (epoch ms)" }, 400));
+        }
+
+        // Fetch events that *might* overlap range, including recurring
+        // For non-recurring, we can filter by overlap.
+        // For recurring, we include and expand.
+        const { results } = await env.DB.prepare(
+          `SELECT id, calendar_id, title, location, icon, start_ts, end_ts, all_day, rrule, created_at
+           FROM events
+           WHERE calendar_id = ?
+           AND (
+             rrule IS NOT NULL
+             OR (start_ts < ? AND end_ts > ?)
+             OR (start_ts >= ? AND start_ts <= ?)
+             OR (end_ts >= ? AND end_ts <= ?)
+           )
+           ORDER BY start_ts ASC`
+        )
+          .bind(calendarId, to, from, from, to, from, to)
+          .all();
+
+        if (!expand) {
+          return cors(env, json({ user: { id: user.sub, email: user.email }, events: results }));
+        }
+
+        const occurrences = [];
+        for (const ev of results) {
+          if (!ev.rrule) {
+            // single event occurrence
+            occurrences.push({
+              occurrence_id: ev.id + "::" + ev.start_ts,
+              event_id: ev.id,
+              calendar_id: ev.calendar_id,
+              title: ev.title,
+              location: ev.location,
+              icon: ev.icon,
+              start_ts: ev.start_ts,
+              end_ts: ev.end_ts,
+              all_day: !!ev.all_day,
+              rrule: null,
+            });
+          } else {
+            // expand recurring
+            const occs = expandRecurring(ev, from, to, 500);
+            for (const o of occs) occurrences.push(o);
+          }
+        }
+
+        // sort occurrences by start
+        occurrences.sort((a, b) => a.start_ts - b.start_ts);
+
+        return cors(
+          env,
+          json({
+            user: { id: user.sub, email: user.email },
+            events: results,
+            occurrences,
+          })
+        );
+      }
+
+      if (url.pathname === "/events" && request.method === "POST") {
+        const user = await requireAuth(request, env);
+        const body = await safeJson(request);
+
+        const calendar_id = body?.calendar_id;
+        const title = body?.title?.trim();
+        const location = (body?.location || "").trim() || null;
+        const icon = (body?.icon || "").trim() || null;
+        const start_ts = Number(body?.start_ts);
+        const end_ts = Number(body?.end_ts);
+        const all_day = body?.all_day ? 1 : 0;
+        const rrule = (body?.rrule || "").trim() || null;
+
+        if (!calendar_id) return cors(env, json({ error: "calendar_id required" }, 400));
+        if (!title) return cors(env, json({ error: "title required" }, 400));
+        if (!Number.isFinite(start_ts) || !Number.isFinite(end_ts) || end_ts <= start_ts) {
+          return cors(env, json({ error: "Valid start_ts/end_ts required (epoch ms)" }, 400));
+        }
+
+        if (rrule && !isReasonableRRule(rrule)) {
+          return cors(env, json({ error: "Invalid or unsupported rrule" }, 400));
+        }
+
+        const id = crypto.randomUUID();
+        const now = Date.now();
+
+        await env.DB.prepare(
+          `INSERT INTO events
+           (id, calendar_id, title, location, icon, start_ts, end_ts, all_day, rrule, created_by, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+          .bind(id, calendar_id, title, location, icon, start_ts, end_ts, all_day, rrule, user.sub, now)
+          .run();
+
+        return cors(
+          env,
+          json({
+            id,
+            calendar_id,
+            title,
+            location,
+            icon,
+            start_ts,
+            end_ts,
+            all_day: !!all_day,
+            rrule,
+            created_at: now,
+          })
+        );
+      }
+
+      if (url.pathname === "/events" && request.method === "DELETE") {
+        const user = await requireAuth(request, env);
+        const body = await safeJson(request);
+        const id = body?.id;
+
+        if (!id) return cors(env, json({ error: "id required" }, 400));
+
+        // Basic safety: only delete events created_by this user (for now)
+        const res = await env.DB.prepare(
+          "DELETE FROM events WHERE id = ? AND created_by = ?"
+        ).bind(id, user.sub).run();
+
+        // D1 returns changes sometimes, but keep it simple
+        return cors(env, json({ ok: true }));
+      }
+
       return cors(env, new Response("Not Found", { status: 404 }));
     } catch (err) {
-      // IMPORTANT: return 401 for auth errors, not 500
       if (err?.message === "unauthorized") {
         return cors(env, json({ error: "Unauthorized" }, 401));
       }
@@ -75,7 +204,248 @@ export default {
 };
 
 /* =========================
-   AUTH HANDLERS
+   Recurrence expansion
+   Supports:
+   - FREQ=DAILY|WEEKLY|MONTHLY
+   - INTERVAL=n
+   - BYDAY=MO,TU,WE,TH,FR,SA,SU (weekly)
+   - COUNT=n
+   - UNTIL=YYYYMMDDTHHMMSSZ (UTC) or YYYYMMDD
+========================= */
+
+function expandRecurring(ev, from, to, max = 500) {
+  const rule = parseRRule(ev.rrule);
+  if (!rule || !rule.FREQ) return [];
+
+  const freq = rule.FREQ;
+  const interval = parseInt(rule.INTERVAL || "1", 10) || 1;
+  const countLimit = rule.COUNT ? Math.max(0, parseInt(rule.COUNT, 10) || 0) : null;
+  const untilTs = rule.UNTIL ? parseUntil(rule.UNTIL) : null;
+
+  const duration = ev.end_ts - ev.start_ts;
+  const baseStart = ev.start_ts;
+
+  const occurrences = [];
+  let generated = 0;
+
+  // We'll generate occurrences in an inclusive window, capped.
+  // Strategy:
+  // - For DAILY/MONTHLY: step by interval
+  // - For WEEKLY: step by weeks, emit BYDAY set (or same weekday as base if BYDAY missing)
+
+  if (freq === "DAILY") {
+    // Start at first occurrence that could overlap 'from'
+    let cursor = baseStart;
+
+    if (cursor < from) {
+      const diffDays = Math.floor((from - cursor) / DAY_MS);
+      const step = diffDays - (diffDays % interval);
+      cursor += step * DAY_MS;
+      while (cursor + duration < from) cursor += interval * DAY_MS;
+    }
+
+    while (cursor < to && occurrences.length < max) {
+      if (untilTs && cursor > untilTs) break;
+      generated++;
+      if (countLimit && generated > countLimit) break;
+
+      const end = cursor + duration;
+      if (end > from && cursor < to) {
+        occurrences.push(makeOcc(ev, cursor, end));
+      }
+      cursor += interval * DAY_MS;
+    }
+  }
+
+  if (freq === "WEEKLY") {
+    const byday = (rule.BYDAY || "")
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean);
+
+    const days = byday.length ? byday : [weekdayToByday(new Date(baseStart).getDay())];
+    const dayOffsets = days.map(bydayToOffsetFromSunday).filter((x) => x !== null);
+
+    // Move cursor to beginning of base week (Sunday 00:00 local-ish)
+    // We'll treat timestamps in ms and compute week starts in local time.
+    let cursorWeekStart = startOfWeekLocal(baseStart);
+
+    // Jump near the 'from' window
+    while (cursorWeekStart + 7 * DAY_MS < from) {
+      cursorWeekStart += interval * 7 * DAY_MS;
+    }
+    // Ensure we didn't undershoot too far
+    while (cursorWeekStart > from) {
+      cursorWeekStart -= interval * 7 * DAY_MS;
+      if (cursorWeekStart < baseStart) break;
+    }
+
+    // Determine time-of-day for the event in local time
+    const baseDate = new Date(baseStart);
+    const baseH = baseDate.getHours();
+    const baseM = baseDate.getMinutes();
+    const baseS = baseDate.getSeconds();
+    const baseMs = baseDate.getMilliseconds();
+
+    // Generate week by week
+    let weekCursor = cursorWeekStart;
+    while (weekCursor < to && occurrences.length < max) {
+      // for each day in BYDAY, create occurrence on that weekday with base time
+      for (const off of dayOffsets) {
+        const d = new Date(weekCursor + off * DAY_MS);
+        d.setHours(baseH, baseM, baseS, baseMs);
+        const start = d.getTime();
+
+        if (start < baseStart) continue; // don't create occurrences before original start
+        if (untilTs && start > untilTs) continue;
+
+        generated++;
+        if (countLimit && generated > countLimit) break;
+
+        const end = start + duration;
+        if (end > from && start < to) {
+          occurrences.push(makeOcc(ev, start, end));
+        }
+        if (occurrences.length >= max) break;
+      }
+
+      if (countLimit && generated >= countLimit) break;
+      weekCursor += interval * 7 * DAY_MS;
+      if (untilTs && weekCursor > untilTs + 7 * DAY_MS) break;
+    }
+  }
+
+  if (freq === "MONTHLY") {
+    let cursor = new Date(baseStart);
+
+    // Jump near from
+    if (cursor.getTime() < from) {
+      // estimate months diff
+      const start = new Date(baseStart);
+      const fromD = new Date(from);
+      let months =
+        (fromD.getFullYear() - start.getFullYear()) * 12 +
+        (fromD.getMonth() - start.getMonth());
+      months = months - (months % interval);
+      cursor = addMonthsLocal(start, months);
+      while (cursor.getTime() + duration < from) {
+        cursor = addMonthsLocal(cursor, interval);
+      }
+    }
+
+    while (cursor.getTime() < to && occurrences.length < max) {
+      const start = cursor.getTime();
+      if (start < baseStart) {
+        cursor = addMonthsLocal(cursor, interval);
+        continue;
+      }
+      if (untilTs && start > untilTs) break;
+
+      generated++;
+      if (countLimit && generated > countLimit) break;
+
+      const end = start + duration;
+      if (end > from && start < to) {
+        occurrences.push(makeOcc(ev, start, end));
+      }
+      cursor = addMonthsLocal(cursor, interval);
+    }
+  }
+
+  return occurrences.slice(0, max);
+}
+
+function makeOcc(ev, start_ts, end_ts) {
+  return {
+    occurrence_id: ev.id + "::" + start_ts,
+    event_id: ev.id,
+    calendar_id: ev.calendar_id,
+    title: ev.title,
+    location: ev.location,
+    icon: ev.icon,
+    start_ts,
+    end_ts,
+    all_day: !!ev.all_day,
+    rrule: ev.rrule,
+  };
+}
+
+function parseRRule(rrule) {
+  if (!rrule || typeof rrule !== "string") return null;
+  const obj = {};
+  for (const part of rrule.split(";")) {
+    const [k, v] = part.split("=");
+    if (!k || v == null) continue;
+    obj[k.trim().toUpperCase()] = v.trim().toUpperCase();
+  }
+  return obj;
+}
+
+function isReasonableRRule(rrule) {
+  const r = parseRRule(rrule);
+  if (!r || !r.FREQ) return false;
+  if (!["DAILY", "WEEKLY", "MONTHLY"].includes(r.FREQ)) return false;
+  if (r.INTERVAL && (!/^\d+$/.test(r.INTERVAL) || parseInt(r.INTERVAL, 10) <= 0)) return false;
+  if (r.COUNT && (!/^\d+$/.test(r.COUNT) || parseInt(r.COUNT, 10) <= 0)) return false;
+  if (r.UNTIL && !/^\d{8}(T\d{6}Z)?$/.test(r.UNTIL)) return false;
+  if (r.BYDAY && !/^((MO|TU|WE|TH|FR|SA|SU),)*(MO|TU|WE|TH|FR|SA|SU)$/.test(r.BYDAY)) return false;
+  return true;
+}
+
+function parseUntil(until) {
+  // UNTIL=YYYYMMDD or YYYYMMDDTHHMMSSZ
+  if (/^\d{8}$/.test(until)) {
+    const y = parseInt(until.slice(0, 4), 10);
+    const m = parseInt(until.slice(4, 6), 10) - 1;
+    const d = parseInt(until.slice(6, 8), 10);
+    // end of day local
+    const dt = new Date(y, m, d, 23, 59, 59, 999);
+    return dt.getTime();
+  }
+  if (/^\d{8}T\d{6}Z$/.test(until)) {
+    const y = parseInt(until.slice(0, 4), 10);
+    const m = parseInt(until.slice(4, 6), 10) - 1;
+    const d = parseInt(until.slice(6, 8), 10);
+    const hh = parseInt(until.slice(9, 11), 10);
+    const mm = parseInt(until.slice(11, 13), 10);
+    const ss = parseInt(until.slice(13, 15), 10);
+    return Date.UTC(y, m, d, hh, mm, ss, 0);
+  }
+  return null;
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function startOfWeekLocal(ts) {
+  const d = new Date(ts);
+  const day = d.getDay(); // 0=Sun
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - day);
+  return d.getTime();
+}
+
+function addMonthsLocal(dateOrTs, months) {
+  const d = dateOrTs instanceof Date ? new Date(dateOrTs.getTime()) : new Date(dateOrTs);
+  const day = d.getDate();
+  d.setDate(1);
+  d.setMonth(d.getMonth() + months);
+  // clamp day to last day of month
+  const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  d.setDate(Math.min(day, last));
+  return d;
+}
+
+function weekdayToByday(jsDay) {
+  return ["SU", "MO", "TU", "WE", "TH", "FR", "SA"][jsDay] || "MO";
+}
+
+function bydayToOffsetFromSunday(code) {
+  const map = { SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6 };
+  return map[code] ?? null;
+}
+
+/* =========================
+   AUTH (same as before)
 ========================= */
 
 async function handleBootstrap(request, env) {
@@ -84,23 +454,13 @@ async function handleBootstrap(request, env) {
   const email = body?.email?.toLowerCase?.().trim();
   const password = body?.password;
 
-  if (!token || token !== env.BOOTSTRAP_TOKEN) {
-    return json({ error: "Invalid bootstrap token" }, 403);
-  }
-  if (!email || !password) {
-    return json({ error: "Email and password required" }, 400);
-  }
-  if (!isValidEmail(email)) {
-    return json({ error: "Invalid email" }, 400);
-  }
-  if (password.length < 8) {
-    return json({ error: "Password must be at least 8 characters" }, 400);
-  }
+  if (!token || token !== env.BOOTSTRAP_TOKEN) return json({ error: "Invalid bootstrap token" }, 403);
+  if (!email || !password) return json({ error: "Email and password required" }, 400);
+  if (!isValidEmail(email)) return json({ error: "Invalid email" }, 400);
+  if (password.length < 8) return json({ error: "Password must be at least 8 characters" }, 400);
 
   const existingCount = await env.DB.prepare("SELECT COUNT(*) as c FROM users").first();
-  if (existingCount?.c > 0) {
-    return json({ error: "Bootstrap already completed" }, 409);
-  }
+  if (existingCount?.c > 0) return json({ error: "Bootstrap already completed" }, 409);
 
   const { saltB64, hashB64, iterations } = await hashPasswordPBKDF2(password);
 
@@ -109,9 +469,7 @@ async function handleBootstrap(request, env) {
 
   await env.DB.prepare(
     "INSERT INTO users (id, email, password_hash, salt, iterations, created_at) VALUES (?, ?, ?, ?, ?, ?)"
-  )
-    .bind(id, email, hashB64, saltB64, iterations, now)
-    .run();
+  ).bind(id, email, hashB64, saltB64, iterations, now).run();
 
   const jwt = await signJWT(env.JWT_SECRET, { sub: id, email }, 60 * 60 * 24 * 7);
   return withSessionCookie(env, json({ ok: true, email }), jwt);
@@ -126,9 +484,7 @@ async function handleLogin(request, env) {
 
   const user = await env.DB.prepare(
     "SELECT id, email, password_hash, salt, iterations FROM users WHERE email = ?"
-  )
-    .bind(email)
-    .first();
+  ).bind(email).first();
 
   if (!user) return json({ error: "Invalid credentials" }, 401);
 
@@ -148,10 +504,6 @@ async function handleMe(request, env) {
   if (!user) return json({ logged_in: false });
   return json({ logged_in: true, user: { id: user.sub, email: user.email } });
 }
-
-/* =========================
-   AUTH UTILITIES
-========================= */
 
 async function requireAuth(request, env) {
   const user = await getUserFromCookie(request, env);
@@ -173,25 +525,25 @@ async function getUserFromCookie(request, env) {
 
 function withSessionCookie(env, response, jwt) {
   const headers = new Headers(response.headers);
-  headers.append("Set-Cookie", buildSessionCookie(env, jwt));
+  headers.append("Set-Cookie", buildSessionCookie(jwt));
   return new Response(response.body, { status: response.status, headers });
 }
 
 function clearSessionCookie(env, response) {
   const headers = new Headers(response.headers);
-  headers.append("Set-Cookie", buildSessionCookie(env, "", 0));
+  headers.append("Set-Cookie", buildSessionCookie("", 0));
   return new Response(response.body, { status: response.status, headers });
 }
 
-function buildSessionCookie(env, value, maxAgeSeconds = 60 * 60 * 24 * 7) {
+function buildSessionCookie(value, maxAgeSeconds = 60 * 60 * 24 * 7) {
   const parts = [
     `session=${encodeURIComponent(value)}`,
     `Path=/`,
     `HttpOnly`,
     `Secure`,
     `SameSite=Lax`,
+    `Max-Age=${maxAgeSeconds}`,
   ];
-  parts.push(`Max-Age=${maxAgeSeconds}`);
   return parts.join("; ");
 }
 
@@ -257,7 +609,6 @@ function timingSafeEqual(a, b) {
 async function signJWT(secret, payload, ttlSeconds) {
   const header = { alg: "HS256", typ: "JWT" };
   const now = Math.floor(Date.now() / 1000);
-
   const fullPayload = { ...payload, iat: now, exp: now + ttlSeconds };
 
   const encHeader = base64urlEncode(new TextEncoder().encode(JSON.stringify(header)));
@@ -308,7 +659,7 @@ function cors(env, response) {
   const headers = new Headers(response.headers);
   headers.set("Access-Control-Allow-Origin", env.FRONTEND_ORIGIN);
   headers.set("Access-Control-Allow-Credentials", "true");
-  headers.set("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  headers.set("Access-Control-Allow-Methods", "GET,POST,DELETE,OPTIONS");
   headers.set("Access-Control-Allow-Headers", "Content-Type");
   return new Response(response.body, { status: response.status, headers });
 }
