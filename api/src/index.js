@@ -163,6 +163,282 @@ export default {
         return cors(env, request, json({ ok: true, id, build_id: BUILD_ID }));
       }
 
+      // KIDS (protected)
+      if (url.pathname === "/kids" && request.method === "GET") {
+        const user = await requireAuth(request, env);
+        const { results } = await env.DB.prepare(
+          "SELECT id, name, avatar, created_at FROM kids WHERE created_by = ? ORDER BY created_at DESC"
+        ).bind(user.sub).all();
+
+        return cors(env, request, json({ ok: true, kids: results, build_id: BUILD_ID }));
+      }
+
+      if (url.pathname === "/kids" && request.method === "POST") {
+        const user = await requireAuth(request, env);
+        const body = await safeJson(request);
+
+        const name = normalize(body?.name);
+        const avatar = normalize(body?.avatar);
+
+        if (!name) return cors(env, request, json({ error: "name required", build_id: BUILD_ID }, 400));
+
+        const id = crypto.randomUUID();
+        const now = Date.now();
+
+        await env.DB.prepare(
+          "INSERT INTO kids (id, name, avatar, created_by, created_at) VALUES (?, ?, ?, ?, ?)"
+        ).bind(id, name, avatar || null, user.sub, now).run();
+
+        return cors(env, request, json({ ok: true, id, build_id: BUILD_ID }));
+      }
+
+      // CHORES (protected)
+      if (url.pathname === "/chores" && request.method === "GET") {
+        const user = await requireAuth(request, env);
+
+        const kid_id = normalize(url.searchParams.get("kid_id"));
+        const status = normalize(url.searchParams.get("status")).toLowerCase();
+        const due_before_raw = normalize(url.searchParams.get("due_before"));
+        const due_before = due_before_raw ? Number(due_before_raw) : null;
+
+        if (due_before_raw && !Number.isFinite(due_before)) {
+          return cors(env, request, json({ error: "due_before must be epoch ms", build_id: BUILD_ID }, 400));
+        }
+
+        if (status && !["assigned", "completed", "rewarded"].includes(status)) {
+          return cors(env, request, json({ error: "invalid status", build_id: BUILD_ID }, 400));
+        }
+
+        const binds = [user.sub];
+        const filters = ["c.created_by = ?"];
+
+        if (kid_id) {
+          filters.push("c.kid_id = ?");
+          binds.push(kid_id);
+        }
+        if (status) {
+          filters.push("c.status = ?");
+          binds.push(status);
+        }
+        if (due_before !== null) {
+          filters.push("c.due_ts <= ?");
+          binds.push(due_before);
+        }
+
+        const stmt = env.DB.prepare(
+          `SELECT c.id, c.kid_id, c.title, c.description, c.status, c.due_ts, c.completed_at, c.rewarded_at, c.created_at
+           FROM chores c
+           INNER JOIN kids k ON k.id = c.kid_id
+           WHERE ${filters.join(" AND ")} AND k.created_by = ?
+           ORDER BY c.due_ts ASC, c.created_at DESC`
+        ).bind(...binds, user.sub);
+
+        const { results } = await stmt.all();
+        return cors(env, request, json({ ok: true, chores: results, build_id: BUILD_ID }));
+      }
+
+      if (url.pathname === "/chores" && request.method === "POST") {
+        const user = await requireAuth(request, env);
+        const body = await safeJson(request);
+
+        const kid_id = normalize(body?.kid_id);
+        const title = normalize(body?.title);
+        const description = normalize(body?.description);
+        const due_ts = Number(body?.due_ts);
+
+        if (!kid_id) return cors(env, request, json({ error: "kid_id required", build_id: BUILD_ID }, 400));
+        if (!title) return cors(env, request, json({ error: "title required", build_id: BUILD_ID }, 400));
+        if (!Number.isFinite(due_ts)) {
+          return cors(env, request, json({ error: "due_ts required (epoch ms)", build_id: BUILD_ID }, 400));
+        }
+
+        const ownKid = await env.DB.prepare(
+          "SELECT id FROM kids WHERE id = ? AND created_by = ?"
+        ).bind(kid_id, user.sub).first();
+
+        if (!ownKid) return cors(env, request, json({ error: "Kid not found", build_id: BUILD_ID }, 404));
+
+        const id = crypto.randomUUID();
+        const now = Date.now();
+
+        await env.DB.prepare(
+          `INSERT INTO chores (id, kid_id, title, description, status, due_ts, created_by, created_at, updated_at)
+           VALUES (?, ?, ?, ?, 'assigned', ?, ?, ?, ?)`
+        ).bind(id, kid_id, title, description || null, due_ts, user.sub, now, now).run();
+
+        return cors(env, request, json({ ok: true, id, build_id: BUILD_ID }));
+      }
+
+      if (url.pathname.startsWith("/chores/") && request.method === "PUT") {
+        const user = await requireAuth(request, env);
+        const id = url.pathname.split("/")[2] || "";
+        const body = await safeJson(request);
+        const nextStatus = normalize(body?.status).toLowerCase();
+
+        if (!id) return cors(env, request, json({ error: "id required", build_id: BUILD_ID }, 400));
+        if (!["assigned", "completed", "rewarded"].includes(nextStatus)) {
+          return cors(env, request, json({ error: "status must be assigned|completed|rewarded", build_id: BUILD_ID }, 400));
+        }
+
+        const chore = await env.DB.prepare(
+          `SELECT c.id, c.status, c.kid_id
+           FROM chores c
+           INNER JOIN kids k ON k.id = c.kid_id
+           WHERE c.id = ? AND c.created_by = ? AND k.created_by = ?`
+        ).bind(id, user.sub, user.sub).first();
+
+        if (!chore) return cors(env, request, json({ error: "Chore not found", build_id: BUILD_ID }, 404));
+
+        const transitions = {
+          assigned: "completed",
+          completed: "rewarded",
+          rewarded: null,
+        };
+
+        if (transitions[chore.status] !== nextStatus) {
+          return cors(env, request, json({ error: "Invalid status transition", build_id: BUILD_ID }, 409));
+        }
+
+        const now = Date.now();
+        let stmt;
+        if (nextStatus === "completed") {
+          stmt = env.DB.prepare(
+            "UPDATE chores SET status = ?, completed_at = ?, updated_at = ? WHERE id = ? AND created_by = ?"
+          ).bind(nextStatus, now, now, id, user.sub);
+        } else {
+          stmt = env.DB.prepare(
+            "UPDATE chores SET status = ?, rewarded_at = ?, updated_at = ? WHERE id = ? AND created_by = ?"
+          ).bind(nextStatus, now, now, id, user.sub);
+        }
+
+        await stmt.run();
+        return cors(env, request, json({ ok: true, id, status: nextStatus, build_id: BUILD_ID }));
+      }
+
+      // Kid landing summary (protected)
+      if (/^\/kids\/[^/]+\/landing$/.test(url.pathname) && request.method === "GET") {
+        const user = await requireAuth(request, env);
+        const id = url.pathname.split("/")[2] || "";
+
+        if (!id) return cors(env, request, json({ error: "id required", build_id: BUILD_ID }, 400));
+
+        const kid = await env.DB.prepare(
+          "SELECT id, name FROM kids WHERE id = ? AND created_by = ?"
+        ).bind(id, user.sub).first();
+
+        if (!kid) return cors(env, request, json({ error: "Kid not found", build_id: BUILD_ID }, 404));
+
+        const now = Date.now();
+        const soon = now + (7 * 24 * 60 * 60 * 1000);
+
+        const overdue = await env.DB.prepare(
+          "SELECT COUNT(*) as c FROM chores WHERE kid_id = ? AND created_by = ? AND status = 'assigned' AND due_ts < ?"
+        ).bind(id, user.sub, now).first();
+
+        const dueSoon = await env.DB.prepare(
+          "SELECT COUNT(*) as c FROM chores WHERE kid_id = ? AND created_by = ? AND status = 'assigned' AND due_ts >= ? AND due_ts <= ?"
+        ).bind(id, user.sub, now, soon).first();
+
+        const completed = await env.DB.prepare(
+          "SELECT COUNT(*) as c FROM chores WHERE kid_id = ? AND created_by = ? AND status IN ('completed', 'rewarded')"
+        ).bind(id, user.sub).first();
+
+        const { results } = await env.DB.prepare(
+          `SELECT id, title, status, due_ts
+           FROM chores
+           WHERE kid_id = ? AND created_by = ? AND status = 'assigned' AND due_ts <= ?
+           ORDER BY due_ts ASC
+           LIMIT 50`
+        ).bind(id, user.sub, soon).all();
+
+        return cors(env, request, json({
+          ok: true,
+          kid,
+          summary: {
+            overdue_count: Number(overdue?.c || 0),
+            due_soon_count: Number(dueSoon?.c || 0),
+            completed_count: Number(completed?.c || 0),
+            due_chores: results,
+          },
+          build_id: BUILD_ID,
+        }));
+      }
+
+      // Gift card inventory + issuance (protected)
+      if (url.pathname === "/gift-cards" && request.method === "POST") {
+        const user = await requireAuth(request, env);
+        const body = await safeJson(request);
+
+        const singleCode = normalize(body?.code);
+        const manyCodes = Array.isArray(body?.codes)
+          ? body.codes.map(x => normalize(x)).filter(Boolean)
+          : [];
+        const codes = [...manyCodes, ...(singleCode ? [singleCode] : [])];
+
+        if (!codes.length) {
+          return cors(env, request, json({ error: "code or codes[] required", build_id: BUILD_ID }, 400));
+        }
+
+        const now = Date.now();
+        for (const code of codes) {
+          const id = crypto.randomUUID();
+          await env.DB.prepare(
+            "INSERT INTO gift_cards (id, code, status, created_by, created_at) VALUES (?, ?, 'available', ?, ?)"
+          ).bind(id, code, user.sub, now).run();
+        }
+
+        return cors(env, request, json({ ok: true, inserted: codes.length, build_id: BUILD_ID }));
+      }
+
+      if (url.pathname === "/rewards/issue" && request.method === "POST") {
+        const user = await requireAuth(request, env);
+        const body = await safeJson(request);
+
+        const chore_id = normalize(body?.chore_id);
+        const gift_card_id = normalize(body?.gift_card_id);
+        if (!chore_id) return cors(env, request, json({ error: "chore_id required", build_id: BUILD_ID }, 400));
+
+        const chore = await env.DB.prepare(
+          `SELECT c.id, c.kid_id, c.status
+           FROM chores c
+           INNER JOIN kids k ON k.id = c.kid_id
+           WHERE c.id = ? AND c.created_by = ? AND k.created_by = ?`
+        ).bind(chore_id, user.sub, user.sub).first();
+
+        if (!chore) return cors(env, request, json({ error: "Chore not found", build_id: BUILD_ID }, 404));
+        if (chore.status !== "completed") {
+          return cors(env, request, json({ error: "Chore must be completed before issuing reward", build_id: BUILD_ID }, 409));
+        }
+
+        let giftCard;
+        if (gift_card_id) {
+          giftCard = await env.DB.prepare(
+            "SELECT id, status FROM gift_cards WHERE id = ? AND created_by = ?"
+          ).bind(gift_card_id, user.sub).first();
+        } else {
+          giftCard = await env.DB.prepare(
+            "SELECT id, status FROM gift_cards WHERE created_by = ? AND status = 'available' ORDER BY created_at ASC LIMIT 1"
+          ).bind(user.sub).first();
+        }
+
+        if (!giftCard) return cors(env, request, json({ error: "No gift card available", build_id: BUILD_ID }, 404));
+        if (giftCard.status !== "available") {
+          return cors(env, request, json({ error: "Gift card unavailable", build_id: BUILD_ID }, 409));
+        }
+
+        const now = Date.now();
+
+        await env.DB.prepare(
+          "UPDATE gift_cards SET status = 'issued', issued_to_kid_id = ?, issued_for_chore_id = ?, issued_at = ? WHERE id = ? AND created_by = ?"
+        ).bind(chore.kid_id, chore.id, now, giftCard.id, user.sub).run();
+
+        await env.DB.prepare(
+          "UPDATE chores SET status = 'rewarded', rewarded_at = ?, updated_at = ? WHERE id = ? AND created_by = ?"
+        ).bind(now, now, chore.id, user.sub).run();
+
+        return cors(env, request, json({ ok: true, chore_id: chore.id, gift_card_id: giftCard.id, build_id: BUILD_ID }));
+      }
+
       // ✅ UPDATE EVENT
       if (url.pathname.startsWith("/events/") && request.method === "PUT") {
         const user = await requireAuth(request, env);
