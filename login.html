@@ -6,20 +6,25 @@
   <title>Login</title>
   <style>
     body { font-family: Arial, Helvetica, sans-serif; background:#111; color:#f5f5f5; margin:0; min-height:100vh; display:grid; place-items:center; }
-    .card { width:min(420px, calc(100% - 2rem)); border:1px solid #444; border-radius:12px; padding:1.25rem; background:#161616; }
+    .card { width:min(460px, calc(100% - 2rem)); border:1px solid #444; border-radius:12px; padding:1.25rem; background:#161616; }
     h1 { margin:0 0 1rem 0; font-size:1.25rem; }
     label { display:block; margin:.75rem 0 .25rem; opacity:.9; }
-    input { width:100%; padding:.75rem; border-radius:10px; border:1px solid #444; background:#0f0f0f; color:#f5f5f5; }
+    input { width:100%; padding:.75rem; border-radius:10px; border:1px solid #444; background:#0f0f0f; color:#f5f5f5; box-sizing:border-box; }
     button { width:100%; padding:.8rem; margin-top:1rem; border:0; border-radius:10px; background:#f5f5f5; color:#111; font-weight:700; cursor:pointer; }
-    .msg { margin-top:.75rem; min-height:1.25rem; color:#ffb4b4; }
-    .small { margin-top:1rem; font-size:.9rem; opacity:.7; line-height:1.35; }
+    .msg { margin-top:.75rem; min-height:1.25rem; color:#ffb4b4; white-space:pre-wrap; }
+    .ok { color:#b8ffb8; }
+    .small { margin-top:1rem; font-size:.9rem; opacity:.75; line-height:1.35; }
     .toggle { margin-top:1rem; border-top:1px solid #2a2a2a; padding-top:1rem; }
-    .hint { font-size:.85rem; opacity:.7; }
+    code { background:#0f0f0f; padding:.15rem .35rem; border-radius:6px; border:1px solid #2a2a2a; }
   </style>
 </head>
 <body>
   <main class="card">
     <h1>Family Calendar Login</h1>
+
+    <div class="small">
+      API: <code id="apiShow"></code>
+    </div>
 
     <label for="email">Email</label>
     <input id="email" type="email" autocomplete="username" placeholder="you@example.com" />
@@ -28,72 +33,97 @@
     <input id="password" type="password" autocomplete="current-password" placeholder="••••••••" />
 
     <button onclick="login()">Log in</button>
-    <div class="msg" id="msg"></div>
 
     <div class="toggle">
-      <div class="hint">
-        First time setup only: use bootstrap to create the first account.
+      <div class="small">
+        First time only: create the first user with the bootstrap token.
       </div>
 
       <label for="bootstrap">Bootstrap token</label>
       <input id="bootstrap" type="password" placeholder="BOOTSTRAP_TOKEN" />
 
       <button onclick="bootstrap()">Create first account</button>
-      <div class="small">
-        After the first user exists, bootstrap will refuse to run (on purpose).
-      </div>
     </div>
+
+    <div class="msg" id="msg"></div>
   </main>
 
   <script>
-    // CHANGE THIS:
+    // MUST be your Worker base URL, like:
+    // https://whatever-your-worker.workers.dev
     const API = "https://YOUR_WORKER_DOMAIN";
+
+    document.getElementById("apiShow").textContent = API;
 
     async function login() {
       setMsg("");
-      const email = document.getElementById("email").value.trim();
-      const password = document.getElementById("password").value;
+      try {
+        const email = document.getElementById("email").value.trim();
+        const password = document.getElementById("password").value;
 
-      const res = await fetch(API + "/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ email, password })
-      });
+        const res = await fetch(API + "/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ email, password })
+        });
 
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setMsg(data.error || "Login failed");
-        return;
+        const text = await res.text();
+        console.log("LOGIN status:", res.status, "body:", text);
+
+        let data = {};
+        try { data = JSON.parse(text); } catch {}
+
+        if (!res.ok) {
+          setMsg("Login failed:\n" + (data.error || text || ("HTTP " + res.status)));
+          return;
+        }
+
+        setMsg("Logged in. Redirecting...", true);
+        location.href = "/app.html";
+      } catch (e) {
+        console.error(e);
+        setMsg("Request failed (network/CORS/API URL):\n" + e.message);
       }
-
-      location.href = "/app.html";
     }
 
     async function bootstrap() {
       setMsg("");
-      const email = document.getElementById("email").value.trim();
-      const password = document.getElementById("password").value;
-      const bootstrap_token = document.getElementById("bootstrap").value;
+      try {
+        const email = document.getElementById("email").value.trim();
+        const password = document.getElementById("password").value;
+        const bootstrap_token = document.getElementById("bootstrap").value;
 
-      const res = await fetch(API + "/auth/bootstrap", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ email, password, bootstrap_token })
-      });
+        const res = await fetch(API + "/auth/bootstrap", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ email, password, bootstrap_token })
+        });
 
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setMsg(data.error || "Bootstrap failed");
-        return;
+        const text = await res.text();
+        console.log("BOOTSTRAP status:", res.status, "body:", text);
+
+        let data = {};
+        try { data = JSON.parse(text); } catch {}
+
+        if (!res.ok) {
+          setMsg("Bootstrap failed:\n" + (data.error || text || ("HTTP " + res.status)));
+          return;
+        }
+
+        setMsg("Account created. Redirecting...", true);
+        location.href = "/app.html";
+      } catch (e) {
+        console.error(e);
+        setMsg("Request failed (network/CORS/API URL):\n" + e.message);
       }
-
-      location.href = "/app.html";
     }
 
-    function setMsg(t) {
-      document.getElementById("msg").textContent = t;
+    function setMsg(t, ok=false) {
+      const el = document.getElementById("msg");
+      el.textContent = t;
+      el.className = "msg" + (ok ? " ok" : "");
     }
   </script>
 </body>
