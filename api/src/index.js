@@ -192,6 +192,31 @@ export default {
         return cors(env, request, json({ ok: true, id, build_id: BUILD_ID }));
       }
 
+      if (/^\/kids\/[^/]+$/.test(url.pathname) && request.method === "PATCH") {
+        const user = await requireAuth(request, env);
+        const id = url.pathname.split("/")[2] || "";
+        const body = await safeJson(request);
+
+        if (!id) return cors(env, request, json({ error: "id required", build_id: BUILD_ID }, 400));
+
+        const name = normalize(body?.name);
+        const avatar = normalize(body?.avatar);
+
+        if (!name) return cors(env, request, json({ error: "name required", build_id: BUILD_ID }, 400));
+
+        const existing = await env.DB.prepare(
+          "SELECT id FROM kids WHERE id = ? AND created_by = ?"
+        ).bind(id, user.sub).first();
+
+        if (!existing) return cors(env, request, json({ error: "Kid not found", build_id: BUILD_ID }, 404));
+
+        await env.DB.prepare(
+          "UPDATE kids SET name = ?, avatar = ? WHERE id = ? AND created_by = ?"
+        ).bind(name, avatar || null, id, user.sub).run();
+
+        return cors(env, request, json({ ok: true, id, build_id: BUILD_ID }));
+      }
+
       // CHORES (protected)
       if (url.pathname === "/chores" && request.method === "GET") {
         const user = await requireAuth(request, env);
