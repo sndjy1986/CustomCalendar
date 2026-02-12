@@ -551,7 +551,9 @@ export default {
 
 function normalizePath(path) {
   if (!path) return "/";
-  const trimmed = path.replace(/\/+$, "");
+  let trimmed = path.replace(/\/+$, "");
+  if (trimmed.startsWith("/api/")) trimmed = trimmed.slice(4);
+  if (trimmed === "/api") trimmed = "/";
   return trimmed || "/";
 }
 
