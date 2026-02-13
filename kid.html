@@ -573,12 +573,6 @@ async function saveKidEdit(){
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   });
-
-  if (!res.ok) {
-    setStatus(data.error || data.details || 'Failed to update kid profile', true);
-    return;
-  }
-
   // Clear PIN field after save
   const pinEl = document.getElementById('editKidPin');
   if (pinEl) pinEl.value = '';
