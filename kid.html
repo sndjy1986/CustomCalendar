@@ -574,27 +574,6 @@ async function saveKidEdit(){
   setStatus('Kid profile updated.');
   await refreshAll();
 }
-
-
-  // Validate PIN only if entered
-  if (pin && !/^\d{4,8}$/.test(pin)) {
-    setStatus('PIN must be 4–8 digits.', true);
-    return;
-  }
-
-  const payload = { name, avatar };
-
-  // Only send PIN if parent entered one
-  if (pin) {
-    payload.pin = pin;
-  }
-
-  const { res, data } = await apiFetch('/kids/' + encodeURIComponent(selectedKidId), {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-
   if (!res.ok) { 
     setStatus(data.error || 'Failed to update kid profile', true); 
     return; 
