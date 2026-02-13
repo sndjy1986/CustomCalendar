@@ -1,17 +1,23 @@
-const BUILD_ID = "family-cal-worker-2026-02-12h";
+const BUILD_ID = "family-cal-worker-2026-02-12h-fixed";
 const PBKDF2_ITERATIONS = 100000;
+
+/* =======================
+   Worker
+======================= */
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const pathname = normalizePath(url.pathname);
 
+    // CORS preflight
     if (request.method === "OPTIONS") {
       return cors(env, request, new Response(null, { status: 204 }));
     }
 
     try {
-      if (pathname === "/debug/config") {
+      // Debug/config
+      if (pathname === "/debug/config" && request.method === "GET") {
         const allowed = getAllowedOrigins(env);
         return cors(env, request, json({
           ok: true,
@@ -29,11 +35,15 @@ export default {
         }));
       }
 
-      if (pathname === "/health") {
+      // Health
+      if (pathname === "/health" && request.method === "GET") {
         return cors(env, request, json({ ok: true, build_id: BUILD_ID, ts: Date.now() }));
       }
 
-      // AUTH
+      /* =======================
+         AUTH
+      ======================= */
+
       if (pathname === "/auth/bootstrap" && request.method === "POST") {
         return cors(env, request, await handleBootstrap(request, env));
       }
@@ -47,13 +57,18 @@ export default {
         return cors(env, request, await handleMe(request, env));
       }
 
-      // CALENDARS (protected)
+      /* =======================
+         CALENDARS (protected)
+      ======================= */
+
       if (pathname === "/calendars" && request.method === "GET") {
         const user = await requireAuth(request, env);
+
         const { results } = await env.DB.prepare(
-          "SELECT id, name, color, created_at FROM calendars ORDER BY created_at DESC"
-        ).all();
-        return cors(env, request, json({ user, calendars: results, build_id: BUILD_ID }));
+          "SELECT id, name, color, created_at FROM calendars WHERE created_by = ? ORDER BY created_at DESC"
+        ).bind(user.sub).all();
+
+        return cors(env, request, json({ ok: true, calendars: results, build_id: BUILD_ID }));
       }
 
       if (pathname === "/calendars" && request.method === "POST") {
@@ -74,7 +89,10 @@ export default {
         return cors(env, request, json({ ok: true, id, build_id: BUILD_ID }));
       }
 
-      // EVENTS (protected)
+      /* =======================
+         EVENTS (protected)
+      ======================= */
+
       if (pathname === "/events" && request.method === "GET") {
         const user = await requireAuth(request, env);
 
@@ -91,23 +109,25 @@ export default {
           stmt = env.DB.prepare(
             `SELECT id, calendar_id, title, location, start_ts, end_ts, all_day, color, icon, notes, recurrence
              FROM events
-             WHERE calendar_id = ?
+             WHERE created_by = ?
+               AND calendar_id = ?
                AND start_ts < ?
                AND end_ts > ?
              ORDER BY start_ts ASC`
-          ).bind(calendar_id, end, start);
+          ).bind(user.sub, calendar_id, end, start);
         } else {
           stmt = env.DB.prepare(
             `SELECT id, calendar_id, title, location, start_ts, end_ts, all_day, color, icon, notes, recurrence
              FROM events
-             WHERE start_ts < ?
+             WHERE created_by = ?
+               AND start_ts < ?
                AND end_ts > ?
              ORDER BY start_ts ASC`
-          ).bind(end, start);
+          ).bind(user.sub, end, start);
         }
 
         const { results } = await stmt.all();
-        return cors(env, request, json({ ok: true, user, events: results, build_id: BUILD_ID }));
+        return cors(env, request, json({ ok: true, events: results, build_id: BUILD_ID }));
       }
 
       if (pathname === "/events" && request.method === "POST") {
@@ -138,6 +158,12 @@ export default {
           return cors(env, request, json({ error: "Invalid start_ts/end_ts (ms)", build_id: BUILD_ID }, 400));
         }
 
+        // Make sure calendar belongs to user
+        const cal = await env.DB.prepare(
+          "SELECT id FROM calendars WHERE id = ? AND created_by = ?"
+        ).bind(calendar_id, user.sub).first();
+        if (!cal) return cors(env, request, json({ error: "Calendar not found", build_id: BUILD_ID }, 404));
+
         const id = crypto.randomUUID();
         const now = Date.now();
 
@@ -164,9 +190,87 @@ export default {
         return cors(env, request, json({ ok: true, id, build_id: BUILD_ID }));
       }
 
-      // KIDS (protected)
+      // UPDATE EVENT
+      if (pathname.startsWith("/events/") && request.method === "PUT") {
+        const user = await requireAuth(request, env);
+        const id = pathname.split("/")[2] || "";
+        const body = await safeJson(request);
+
+        if (!id) return cors(env, request, json({ error: "id required", build_id: BUILD_ID }, 400));
+
+        const calendar_id = normalize(body?.calendar_id);
+        const title = normalize(body?.title);
+        const location = normalize(body?.location);
+        const notes = normalize(body?.notes);
+        const icon = normalize(body?.icon);
+        const color = normalize(body?.color);
+        const all_day = body?.all_day ? 1 : 0;
+
+        const start_ts = Number(body?.start_ts);
+        const end_ts = Number(body?.end_ts);
+
+        let recurrence = null;
+        if (body?.recurrence && typeof body.recurrence === "object") {
+          recurrence = JSON.stringify(body.recurrence);
+        } else if (typeof body?.recurrence === "string" && body.recurrence.trim()) {
+          recurrence = body.recurrence.trim();
+        }
+
+        if (!calendar_id) return cors(env, request, json({ error: "calendar_id required", build_id: BUILD_ID }, 400));
+        if (!title) return cors(env, request, json({ error: "title required", build_id: BUILD_ID }, 400));
+        if (!Number.isFinite(start_ts) || !Number.isFinite(end_ts) || end_ts <= start_ts) {
+          return cors(env, request, json({ error: "Invalid start_ts/end_ts (ms)", build_id: BUILD_ID }, 400));
+        }
+
+        const cal = await env.DB.prepare(
+          "SELECT id FROM calendars WHERE id = ? AND created_by = ?"
+        ).bind(calendar_id, user.sub).first();
+        if (!cal) return cors(env, request, json({ error: "Calendar not found", build_id: BUILD_ID }, 404));
+
+        await env.DB.prepare(
+          `UPDATE events
+           SET calendar_id = ?, title = ?, location = ?, start_ts = ?, end_ts = ?, all_day = ?,
+               color = ?, icon = ?, notes = ?, recurrence = ?
+           WHERE id = ? AND created_by = ?`
+        ).bind(
+          calendar_id,
+          title,
+          location || null,
+          start_ts,
+          end_ts,
+          all_day,
+          color || null,
+          icon || null,
+          notes || null,
+          recurrence || null,
+          id,
+          user.sub
+        ).run();
+
+        return cors(env, request, json({ ok: true, id, build_id: BUILD_ID }));
+      }
+
+      // DELETE EVENT
+      if (pathname.startsWith("/events/") && request.method === "DELETE") {
+        const user = await requireAuth(request, env);
+        const id = pathname.split("/")[2] || "";
+
+        if (!id) return cors(env, request, json({ error: "id required", build_id: BUILD_ID }, 400));
+
+        await env.DB.prepare(
+          "DELETE FROM events WHERE id = ? AND created_by = ?"
+        ).bind(id, user.sub).run();
+
+        return cors(env, request, json({ ok: true, build_id: BUILD_ID }));
+      }
+
+      /* =======================
+         KIDS (protected)
+      ======================= */
+
       if (pathname === "/kids" && request.method === "GET") {
         const user = await requireAuth(request, env);
+
         const { results } = await env.DB.prepare(
           "SELECT id, name, avatar, created_at FROM kids WHERE created_by = ? ORDER BY created_at DESC"
         ).bind(user.sub).all();
@@ -180,7 +284,6 @@ export default {
 
         const name = normalize(body?.name);
         const avatar = normalize(body?.avatar);
-
         if (!name) return cors(env, request, json({ error: "name required", build_id: BUILD_ID }, 400));
 
         const id = crypto.randomUUID();
@@ -202,7 +305,6 @@ export default {
 
         const name = normalize(body?.name);
         const avatar = normalize(body?.avatar);
-
         if (!name) return cors(env, request, json({ error: "name required", build_id: BUILD_ID }, 400));
 
         const existing = await env.DB.prepare(
@@ -218,7 +320,10 @@ export default {
         return cors(env, request, json({ ok: true, id, build_id: BUILD_ID }));
       }
 
-      // CHORES (protected)
+      /* =======================
+         CHORES (protected)
+      ======================= */
+
       if (pathname === "/chores" && request.method === "GET") {
         const user = await requireAuth(request, env);
 
@@ -230,7 +335,6 @@ export default {
         if (due_before_raw && !Number.isFinite(due_before)) {
           return cors(env, request, json({ error: "due_before must be epoch ms", build_id: BUILD_ID }, 400));
         }
-
         if (status && !["assigned", "completed", "rewarded"].includes(status)) {
           return cors(env, request, json({ error: "invalid status", build_id: BUILD_ID }, 400));
         }
@@ -238,18 +342,9 @@ export default {
         const binds = [user.sub];
         const filters = ["c.created_by = ?"];
 
-        if (kid_id) {
-          filters.push("c.kid_id = ?");
-          binds.push(kid_id);
-        }
-        if (status) {
-          filters.push("c.status = ?");
-          binds.push(status);
-        }
-        if (due_before !== null) {
-          filters.push("c.due_ts <= ?");
-          binds.push(due_before);
-        }
+        if (kid_id) { filters.push("c.kid_id = ?"); binds.push(kid_id); }
+        if (status) { filters.push("c.status = ?"); binds.push(status); }
+        if (due_before !== null) { filters.push("c.due_ts <= ?"); binds.push(due_before); }
 
         const stmt = env.DB.prepare(
           `SELECT c.id, c.kid_id, c.title, c.description, c.status, c.due_ts, c.completed_at, c.rewarded_at, c.created_at
@@ -315,29 +410,22 @@ export default {
 
         if (!chore) return cors(env, request, json({ error: "Chore not found", build_id: BUILD_ID }, 404));
 
-        const transitions = {
-          assigned: "completed",
-          completed: "rewarded",
-          rewarded: null,
-        };
-
+        const transitions = { assigned: "completed", completed: "rewarded", rewarded: null };
         if (transitions[chore.status] !== nextStatus) {
           return cors(env, request, json({ error: "Invalid status transition", build_id: BUILD_ID }, 409));
         }
 
         const now = Date.now();
-        let stmt;
         if (nextStatus === "completed") {
-          stmt = env.DB.prepare(
+          await env.DB.prepare(
             "UPDATE chores SET status = ?, completed_at = ?, updated_at = ? WHERE id = ? AND created_by = ?"
-          ).bind(nextStatus, now, now, id, user.sub);
+          ).bind(nextStatus, now, now, id, user.sub).run();
         } else {
-          stmt = env.DB.prepare(
+          await env.DB.prepare(
             "UPDATE chores SET status = ?, rewarded_at = ?, updated_at = ? WHERE id = ? AND created_by = ?"
-          ).bind(nextStatus, now, now, id, user.sub);
+          ).bind(nextStatus, now, now, id, user.sub).run();
         }
 
-        await stmt.run();
         return cors(env, request, json({ ok: true, id, status: nextStatus, build_id: BUILD_ID }));
       }
 
@@ -390,7 +478,10 @@ export default {
         }));
       }
 
-      // Gift card inventory + issuance (protected)
+      /* =======================
+         Gift cards + rewards (protected)
+      ======================= */
+
       if (pathname === "/gift-cards" && request.method === "POST") {
         const user = await requireAuth(request, env);
         const body = await safeJson(request);
@@ -465,75 +556,6 @@ export default {
         return cors(env, request, json({ ok: true, chore_id: chore.id, gift_card_id: giftCard.id, build_id: BUILD_ID }));
       }
 
-      // ✅ UPDATE EVENT
-      if (pathname.startsWith("/events/") && request.method === "PUT") {
-        const user = await requireAuth(request, env);
-        const id = pathname.split("/")[2] || "";
-        const body = await safeJson(request);
-
-        if (!id) return cors(env, request, json({ error: "id required", build_id: BUILD_ID }, 400));
-
-        const calendar_id = normalize(body?.calendar_id);
-        const title = normalize(body?.title);
-        const location = normalize(body?.location);
-        const notes = normalize(body?.notes);
-        const icon = normalize(body?.icon);
-        const color = normalize(body?.color);
-        const all_day = body?.all_day ? 1 : 0;
-
-        const start_ts = Number(body?.start_ts);
-        const end_ts = Number(body?.end_ts);
-
-        let recurrence = null;
-        if (body?.recurrence && typeof body.recurrence === "object") {
-          recurrence = JSON.stringify(body.recurrence);
-        } else if (typeof body?.recurrence === "string" && body.recurrence.trim()) {
-          recurrence = body.recurrence.trim();
-        }
-
-        if (!calendar_id) return cors(env, request, json({ error: "calendar_id required", build_id: BUILD_ID }, 400));
-        if (!title) return cors(env, request, json({ error: "title required", build_id: BUILD_ID }, 400));
-        if (!Number.isFinite(start_ts) || !Number.isFinite(end_ts) || end_ts <= start_ts) {
-          return cors(env, request, json({ error: "Invalid start_ts/end_ts (ms)", build_id: BUILD_ID }, 400));
-        }
-
-        await env.DB.prepare(
-          `UPDATE events
-           SET calendar_id = ?, title = ?, location = ?, start_ts = ?, end_ts = ?, all_day = ?,
-               color = ?, icon = ?, notes = ?, recurrence = ?
-           WHERE id = ? AND created_by = ?`
-        ).bind(
-          calendar_id,
-          title,
-          location || null,
-          start_ts,
-          end_ts,
-          all_day,
-          color || null,
-          icon || null,
-          notes || null,
-          recurrence || null,
-          id,
-          user.sub
-        ).run();
-
-        return cors(env, request, json({ ok: true, id, build_id: BUILD_ID }));
-      }
-
-      // ✅ DELETE EVENT
-      if (pathname.startsWith("/events/") && request.method === "DELETE") {
-        const user = await requireAuth(request, env);
-        const id = pathname.split("/")[2] || "";
-
-        if (!id) return cors(env, request, json({ error: "id required", build_id: BUILD_ID }, 400));
-
-        await env.DB.prepare(
-          "DELETE FROM events WHERE id = ? AND created_by = ?"
-        ).bind(id, user.sub).run();
-
-        return cors(env, request, json({ ok: true, build_id: BUILD_ID }));
-      }
-
       return cors(env, request, new Response("Not Found", { status: 404 }));
     } catch (err) {
       if (err?.message === "unauthorized") {
@@ -548,10 +570,15 @@ export default {
   },
 };
 
+/* =======================
+   PATH NORMALIZATION
+======================= */
 
 function normalizePath(path) {
   if (!path) return "/";
-  let trimmed = path.replace(/\/+$, "");
+  // ✅ FIXED: correct regex, removes trailing slashes
+  let trimmed = path.replace(/\/+$/, "");
+  // Allow mounting under /api
   if (trimmed.startsWith("/api/")) trimmed = trimmed.slice(4);
   if (trimmed === "/api") trimmed = "/";
   return trimmed || "/";
@@ -563,7 +590,6 @@ function normalizePath(path) {
 
 function cors(env, request, response) {
   const origin = request.headers.get("Origin") || "";
-
   const headers = new Headers(response.headers);
 
   if (origin && isAllowedOrigin(env, origin)) {
@@ -572,8 +598,10 @@ function cors(env, request, response) {
     headers.set("Vary", "Origin");
   }
 
-  headers.set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
-  headers.set("Access-Control-Allow-Headers", "Content-Type");
+  // ✅ FIXED: include PATCH
+  headers.set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
+  // ✅ FIXED: allow bootstrap header if you use it
+  headers.set("Access-Control-Allow-Headers", "Content-Type, X-Bootstrap-Token");
 
   return new Response(response.body, { status: response.status, headers });
 }
@@ -613,7 +641,11 @@ async function handleBootstrap(request, env) {
   const expected = normalize(env.BOOTSTRAP_TOKEN);
   if (!expected) return json({ error: "BOOTSTRAP_TOKEN not configured", build_id: BUILD_ID }, 500);
 
-  const provided = normalize(body?.bootstrap_token);
+  // ✅ SUPPORTS: header OR body
+  const providedHeader = normalize(request.headers.get("X-Bootstrap-Token"));
+  const providedBody = normalize(body?.bootstrap_token);
+  const provided = providedHeader || providedBody;
+
   if (provided !== expected) return json({ error: "Invalid bootstrap token", build_id: BUILD_ID }, 403);
 
   const email = normalize(body?.email).toLowerCase();
@@ -622,6 +654,7 @@ async function handleBootstrap(request, env) {
   if (!email || !password) return json({ error: "Email and password required", build_id: BUILD_ID }, 400);
   if (!env.DB) return json({ error: "DB binding missing", build_id: BUILD_ID }, 500);
 
+  // Bootstrap only if no users exist
   const existing = await env.DB.prepare("SELECT COUNT(*) as c FROM users").first();
   if (existing?.c > 0) return json({ error: "Bootstrap already completed", build_id: BUILD_ID }, 409);
 
