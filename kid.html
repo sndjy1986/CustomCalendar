@@ -548,14 +548,25 @@ async function saveKidEdit(){
 
   const name = document.getElementById('editKidName').value.trim();
   const avatar = document.getElementById('editKidAvatar').value.trim();
-  const calendar_id = document.getElementById('editKidCalendar').value.trim();
+  const calendar_id = document.getElementById('editKidCalendar')?.value?.trim() || '';
+  const pin = document.getElementById('editKidPin')?.value?.trim() || '';
 
   if (!name) { setStatus('Kid name is required.', true); return; }
 
-  const payload = { name, avatar };
+  // Validate PIN only if entered
+  if (pin && !/^\d{4,8}$/.test(pin)) {
+    setStatus('PIN must be 4–8 digits.', true);
+    return;
+  }
 
-  // ✅ only include if chosen, otherwise clear assignment (null server-side)
-  payload.calendar_id = calendar_id || null;
+  const payload = {
+    name,
+    avatar,
+    calendar_id: calendar_id || null
+  };
+
+  // Only send PIN if parent entered one
+  if (pin) payload.pin = pin;
 
   const { res, data } = await apiFetch('/kids/' + encodeURIComponent(selectedKidId), {
     method: 'PATCH',
@@ -563,17 +574,23 @@ async function saveKidEdit(){
     body: JSON.stringify(payload)
   });
 
-  if (!res.ok) { setStatus(data.error || data.details || 'Failed to update kid profile', true); return; }
+  if (!res.ok) {
+    setStatus(data.error || data.details || 'Failed to update kid profile', true);
+    return;
+  }
+
+  // Clear PIN field after save
+  const pinEl = document.getElementById('editKidPin');
+  if (pinEl) pinEl.value = '';
 
   closeEditKidModal();
   await loadKids();
-
-  // keep selection
   if (selectedKidId) document.getElementById('kidSelect').value = selectedKidId;
 
   setStatus('Kid profile updated.');
   await refreshAll();
 }
+
   if (!res.ok) { 
     setStatus(data.error || 'Failed to update kid profile', true); 
     return; 
