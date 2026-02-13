@@ -11,6 +11,20 @@
       --text:#e5e7eb; --muted:#9ca3af; --line:#22314a; --accent:#60a5fa;
       --danger:#fb7185; --ok:#86efac; --warn:#fcd34d;
     }
+    let me = null;
+let kids = [];
+let calendars = [];   // ✅ add this
+let selectedKidId = null;
+async function loadCalendars(){
+  const { res, data } = await apiFetch('/calendars');
+  if (!res.ok) { 
+    setStatus(data.error || 'Failed to load calendars', true); 
+    calendars = [];
+    return;
+  }
+  calendars = data.calendars || [];
+}
+
     *{ box-sizing:border-box; }
     body{ margin:0; font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial; background:var(--bg); color:var(--text); }
     main{ max-width:1100px; margin:0 auto; padding:16px; display:flex; flex-direction:column; gap:12px; }
@@ -190,6 +204,11 @@
       <label>Avatar icon (optional MDI class)</label>
       <input id="editKidAvatar" placeholder="mdi-account-star" />
     </div>
+<div class="col" style="margin-top:10px;">
+  <label>Assigned Calendar (for appointments)</label>
+  <select id="editKidCalendar"></select>
+  <div class="tiny">This controls which appointments the kid sees on their dashboard.</div>
+</div>
 
     <!-- 🔥 NEW PIN FIELD (ONLY ADDITION) -->
     <div class="col" style="margin-top:10px;">
@@ -214,11 +233,13 @@
   let completed = [];
   let rewarded = [];
 
-  (async function init(){
-    await requireLogin();
-    await loadKids();
-    await refreshAll();
-  })();
+(async function init(){
+  await requireLogin();
+  await loadCalendars();   // ✅ add
+  await loadKids();
+  await refreshAll();
+})();
+
 
   async function apiFetch(path, options={}){
     const res = await fetch(API + path, { credentials: "include", ...options });
@@ -489,29 +510,71 @@
     await refreshAll();
   }
 
-  function openEditKidModal(){
-    if (!selectedKidId) { setStatus('Select a kid first.', true); return; }
-    const kid = kids.find(k => k.id === selectedKidId);
-    document.getElementById('editKidName').value = kid?.name || '';
-    document.getElementById('editKidAvatar').value = kid?.avatar || '';
-    document.getElementById('editKidModalWrap').style.display = 'flex';
+function openEditKidModal(){
+  if (!selectedKidId) { setStatus('Select a kid first.', true); return; }
+  const kid = kids.find(k => k.id === selectedKidId);
+
+  document.getElementById('editKidName').value = kid?.name || '';
+  document.getElementById('editKidAvatar').value = kid?.avatar || '';
+
+  // ✅ Build calendar dropdown
+  const sel = document.getElementById('editKidCalendar');
+  sel.innerHTML = '';
+
+  // option: none
+  const none = document.createElement('option');
+  none.value = '';
+  none.textContent = '— No calendar assigned —';
+  sel.appendChild(none);
+
+  for (const c of calendars) {
+    const opt = document.createElement('option');
+    opt.value = c.id;
+    opt.textContent = c.name;
+    sel.appendChild(opt);
   }
+
+  // kid.calendar_id may not exist in your current /kids response yet
+  // so we try anyway and fall back to blank
+  sel.value = kid?.calendar_id || '';
+
+  document.getElementById('editKidModalWrap').style.display = 'flex';
+}
+
   function closeEditKidModal(){ document.getElementById('editKidModalWrap').style.display = 'none'; }
 
- async function saveKidEdit(){
-  if (!selectedKidId) { 
-    setStatus('Select a kid first.', true); 
-    return; 
-  }
+async function saveKidEdit(){
+  if (!selectedKidId) { setStatus('Select a kid first.', true); return; }
 
   const name = document.getElementById('editKidName').value.trim();
   const avatar = document.getElementById('editKidAvatar').value.trim();
-  const pin = document.getElementById('editKidPin').value.trim();
+  const calendar_id = document.getElementById('editKidCalendar').value.trim();
 
-  if (!name) { 
-    setStatus('Kid name is required.', true); 
-    return; 
-  }
+  if (!name) { setStatus('Kid name is required.', true); return; }
+
+  const payload = { name, avatar };
+
+  // ✅ only include if chosen, otherwise clear assignment (null server-side)
+  payload.calendar_id = calendar_id || null;
+
+  const { res, data } = await apiFetch('/kids/' + encodeURIComponent(selectedKidId), {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  if (!res.ok) { setStatus(data.error || data.details || 'Failed to update kid profile', true); return; }
+
+  closeEditKidModal();
+  await loadKids();
+
+  // keep selection
+  if (selectedKidId) document.getElementById('kidSelect').value = selectedKidId;
+
+  setStatus('Kid profile updated.');
+  await refreshAll();
+}
+
 
   // Validate PIN only if entered
   if (pin && !/^\d{4,8}$/.test(pin)) {
