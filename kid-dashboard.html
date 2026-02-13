@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Kid Dashboard | Family Calendar</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css">
+  <style>
+    :root{
+      --bg:#0b0f14; --panel:#101826; --panel2:#0f172a;
+      --text:#e5e7eb; --muted:#9ca3af; --line:#22314a; --accent:#60a5fa;
+      --danger:#fb7185; --ok:#86efac; --warn:#fcd34d;
+    }
+    *{ box-sizing:border-box; }
+    body{ margin:0; font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial; background:var(--bg); color:var(--text); }
+    main{ max-width:1100px; margin:0 auto; padding:16px; display:flex; flex-direction:column; gap:12px; }
+    .topbar,.card{ border:1px solid var(--line); background:rgba(16,24,38,.7); border-radius:14px; }
+    .topbar{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px; }
+    .title{ display:flex; align-items:center; gap:10px; font-weight:800; }
+    .title i{ font-size:20px; color:var(--accent); }
+    .row{ display:flex; align-items:center; gap:10px; }
+    .col{ display:flex; flex-direction:column; gap:10px; }
+    .grid{ display:grid; grid-template-columns:1.1fr 1.1fr .8fr; gap:12px; }
+    .card{ padding:12px; }
+    h2{ margin:0; font-size:16px; }
+    .muted,.tiny{ color:var(--muted); }
+    .tiny{ font-size:12px; font-weight:700; }
+    button{ cursor:pointer; background:#0b1220; color:var(--text); border:1px solid var(--line); padding:9px 12px; border-radius:12px; font-weight:700; }
+    button:hover{ border-color:#36507c; }
+    .primary{ background:var(--accent); color:#07111f; border-color:transparent; }
+    .danger{ border-color:rgba(251,113,133,.35); color:#fecdd3; }
+    .ghost{ background:transparent; }
+    .success{ color:var(--ok); }
+    .warn{ color:var(--warn); }
+    .item{ border:1px solid rgba(255,255,255,.07); border-radius:12px; padding:10px; background:rgba(2,6,23,.35); display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+    .statusPill{ display:inline-flex; align-items:center; gap:5px; border:1px solid rgba(255,255,255,.18); border-radius:999px; padding:2px 9px; font-size:12px; font-weight:800; }
+    .stats{ display:grid; gap:8px; }
+    .stat{ border:1px solid rgba(255,255,255,.07); background:rgba(2,6,23,.35); border-radius:12px; padding:10px; }
+    @media (max-width: 900px){ .grid{ grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+<main>
+  <div class="topbar">
+    <div class="title">
+      <i class="mdi mdi-human-child"></i>
+      <div>
+        <div id="kidTitle">Kid Dashboard</div>
+        <div class="tiny" id="kidSub">Loading...</div>
+      </div>
+    </div>
+    <div class="row">
+      <button class="ghost" onclick="refreshAll()"><i class="mdi mdi-refresh"></i> Refresh</button>
+      <button class="danger" onclick="kidLogout()"><i class="mdi mdi-logout"></i> Logout</button>
+    </div>
+  </div>
+
+  <div class="grid">
+    <section class="card col">
+      <div class="row" style="justify-content:space-between;">
+        <h2>Upcoming chores</h2>
+        <span class="statusPill warn"><i class="mdi mdi-clipboard-text-clock"></i> Assigned</span>
+      </div>
+      <div class="tiny">Stuff you still have to do. Shocking.</div>
+      <div id="assignedList" class="col"></div>
+    </section>
+
+    <section class="card col">
+      <div class="row" style="justify-content:space-between;">
+        <h2>Done, waiting approval</h2>
+        <span class="statusPill warn"><i class="mdi mdi-timer-sand"></i> Pending</span>
+      </div>
+      <div class="tiny">These are completed but not rewarded yet.</div>
+      <div id="pendingList" class="col"></div>
+    </section>
+
+    <section class="card col">
+      <h2>Status</h2>
+      <div class="stats">
+        <div class="stat">
+          <div class="tiny">Points available</div>
+          <div id="points" style="font-size:24px;font-weight:900;">0</div>
+        </div>
+        <div class="stat">
+          <div class="tiny">Upcoming appointments (7 days)</div>
+          <div id="apptCount" style="font-size:24px;font-weight:900;">0</div>
+        </div>
+      </div>
+      <div class="tiny" id="status"></div>
+    </section>
+  </div>
+
+  <section class="card col">
+    <div class="row" style="justify-content:space-between;">
+      <h2>Upcoming appointments</h2>
+      <span class="statusPill"><i class="mdi mdi-calendar-clock"></i> Calendar</span>
+    </div>
+    <div class="tiny">Only shows events from the calendar your parent assigned to you.</div>
+    <div id="apptList" class="col"></div>
+  </section>
+</main>
+
+<script>
+  const API = "https://api.cal.sndjy.us";
+
+  let kid = null;
+  let assigned = [];
+  let pending = [];
+  let events = [];
+
+  (async function init(){
+    // If not logged in as kid, bounce to kid login page
+    const me = await apiFetch("/kid/me");
+    if (!me.res.ok) {
+      location.href = "/kid-login.html";
+      return;
+    }
+    kid = me.data.kid;
+    document.getElementById("kidTitle").textContent = kid.name + " Dashboard";
+    document.getElementById("kidSub").textContent = "Logged in as kid";
+    await refreshAll();
+  })();
+
+  async function apiFetch(path, options={}){
+    const res = await fetch(API + path, { credentials: "include", ...options });
+    const data = await res.json().catch(() => ({}));
+    return { res, data };
+  }
+
+  async function refreshAll(){
+    setStatus("Loading...");
+
+    // chores
+    const a = await apiFetch("/kid/chores?status=assigned");
+    const b = await apiFetch("/kid/chores?status=completed");
+
+    assigned = a.res.ok ? (a.data.chores || []) : [];
+    pending = b.res.ok ? (b.data.chores || []) : [];
+
+    // points: pull from parent kids table via /kid/me? (we’ll add points there later if needed)
+    // For now: fetch kid record again and show points if included (recommended Worker change)
+    const me2 = await apiFetch("/kid/me");
+    const points = me2.res.ok ? (me2.data?.kid?.points_balance || 0) : 0;
+    document.getElementById("points").textContent = String(points);
+
+    // events (7 days)
+    const now = Date.now();
+    const end = now + 7 * 24 * 60 * 60 * 1000;
+    const ev = await apiFetch(`/kid/events?start=${now}&end=${end}`);
+    events = ev.res.ok ? (ev.data.events || []) : [];
+
+    render();
+    setStatus("Loaded.");
+  }
+
+  function render(){
+    renderAssigned();
+    renderPending();
+    renderEvents();
+    document.getElementById("apptCount").textContent = String(events.length);
+  }
+
+  function renderAssigned(){
+    const wrap = document.getElementById("assignedList");
+    wrap.innerHTML = "";
+    if (!assigned.length) {
+      wrap.innerHTML = '<div class="tiny">Nothing assigned right now. Enjoy it while it lasts.</div>';
+      return;
+    }
+    for (const c of assigned.sort((x,y) => (x.due_ts||0) - (y.due_ts||0)).slice(0,50)) {
+      const el = document.createElement("div");
+      el.className = "item";
+      el.innerHTML = `
+        <div>
+          <div style="font-weight:900;">${escapeHtml(c.title)}</div>
+          <div class="tiny">Due ${c.due_ts ? new Date(c.due_ts).toLocaleString() : ""}</div>
+          ${c.description ? `<div class="tiny">${escapeHtml(c.description)}</div>` : ""}
+        </div>
+        <div class="col" style="align-items:flex-end;">
+          <span class="statusPill warn"><i class="mdi mdi-clock-alert-outline"></i> Assigned</span>
+        </div>
+      `;
+      wrap.appendChild(el);
+    }
+  }
+
+  function renderPending(){
+    const wrap = document.getElementById("pendingList");
+    wrap.innerHTML = "";
+    if (!pending.length) {
+      wrap.innerHTML = '<div class="tiny">No chores waiting approval.</div>';
+      return;
+    }
+    for (const c of pending.sort((x,y) => (y.completed_at||0) - (x.completed_at||0)).slice(0,50)) {
+      const el = document.createElement("div");
+      el.className = "item";
+      el.innerHTML = `
+        <div>
+          <div style="font-weight:900;">${escapeHtml(c.title)}</div>
+          <div class="tiny">Completed ${c.completed_at ? new Date(c.completed_at).toLocaleString() : ""}</div>
+        </div>
+        <div class="col" style="align-items:flex-end;">
+          <span class="statusPill warn"><i class="mdi mdi-timer-sand"></i> Waiting</span>
+        </div>
+      `;
+      wrap.appendChild(el);
+    }
+  }
+
+  function renderEvents(){
+    const wrap = document.getElementById("apptList");
+    wrap.innerHTML = "";
+    if (!events.length) {
+      wrap.innerHTML = '<div class="tiny">No upcoming appointments (or no calendar assigned).</div>';
+      return;
+    }
+    for (const e of events.slice(0,100)) {
+      const el = document.createElement("div");
+      el.className = "item";
+      el.innerHTML = `
+        <div>
+          <div style="font-weight:900;">${escapeHtml(e.title)}</div>
+          <div class="tiny">${new Date(e.start_ts).toLocaleString()} → ${new Date(e.end_ts).toLocaleString()}</div>
+          ${e.location ? `<div class="tiny"><i class="mdi mdi-map-marker"></i> ${escapeHtml(e.location)}</div>` : ""}
+        </div>
+        <div class="col" style="align-items:flex-end;">
+          <span class="statusPill"><i class="mdi mdi-calendar"></i> Event</span>
+        </div>
+      `;
+      wrap.appendChild(el);
+    }
+  }
+
+  async function kidLogout(){
+    await apiFetch("/kid/logout", { method: "POST" });
+    location.href = "/kid-login.html";
+  }
+
+  function setStatus(msg, bad=false){
+    const el = document.getElementById("status");
+    el.textContent = msg;
+    el.style.color = bad ? "var(--danger)" : "var(--muted)";
+  }
+
+  function escapeHtml(s){
+    return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;' }[c]));
+  }
+</script>
+</body>
+</html>
