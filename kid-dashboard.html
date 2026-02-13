@@ -108,18 +108,21 @@
   let pending = [];
   let events = [];
 
-  (async function init(){
-    // If not logged in as kid, bounce to kid login page
-    const me = await apiFetch("/kid/me");
-    if (!me.res.ok) {
-      location.href = "/kid-login.html";
-      return;
-    }
-    kid = me.data.kid;
-    document.getElementById("kidTitle").textContent = kid.name + " Dashboard";
-    document.getElementById("kidSub").textContent = "Logged in as kid";
-    await refreshAll();
-  })();
+(async function init(){
+  const now = Date.now();
+  const end = now + 7 * 24 * 60 * 60 * 1000;
+
+  const ev = await apiFetch(`/kid/events?start=${now}&end=${end}`);
+  if (!ev.res.ok) {
+    location.href = "/kid-login.html";
+    return;
+  }
+
+  document.getElementById("kidTitle").textContent = "Kid Dashboard";
+  document.getElementById("kidSub").textContent = "Logged in as kid";
+  await refreshAll();
+})();
+
 
   async function apiFetch(path, options={}){
     const res = await fetch(API + path, { credentials: "include", ...options });
