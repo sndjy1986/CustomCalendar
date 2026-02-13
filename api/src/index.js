@@ -326,7 +326,7 @@ export default {
         const user = await requireAuth(request, env);
 
         const { results } = await env.DB.prepare(
-          "SELECT id, name, avatar, calendar_id, created_at FROM kids WHERE created_by = ? ORDER BY created_at DESC"
+          "SELECT id, name, avatar, calendar_id, created_at, updated_at FROM kids WHERE created_by = ? ORDER BY created_at DESC"
         ).bind(user.sub).all();
 
         return cors(env, request, json({ ok: true, kids: results, build_id: BUILD_ID }));
