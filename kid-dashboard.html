@@ -113,10 +113,15 @@
   const end = now + 7 * 24 * 60 * 60 * 1000;
 
   const ev = await apiFetch(`/kid/events?start=${now}&end=${end}`);
-  if (!ev.res.ok) {
-    location.href = "/kid-login.html";
-    return;
-  }
+if (!ev.res.ok) {
+  console.log("kid/events failed:", ev.res.status, ev.data);
+  setStatus(
+    `Kid events failed: ${ev.res.status} ${ev.data?.error || ev.data?.details || ""}`,
+    true
+  );
+  return; // DO NOT REDIRECT
+}
+
 
   document.getElementById("kidTitle").textContent = "Kid Dashboard";
   document.getElementById("kidSub").textContent = "Logged in as kid";
