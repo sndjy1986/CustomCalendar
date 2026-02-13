@@ -1,4 +1,4 @@
-const BUILD_ID = "family-cal-worker-2026-02-12h-fixed";
+const BUILD_ID = "updated kids/api include calendar";
 const PBKDF2_ITERATIONS = 100000;
 
 /* =======================
