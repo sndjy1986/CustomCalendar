@@ -88,6 +88,42 @@ export default {
 
         return cors(env, request, json({ ok: true, id, build_id: BUILD_ID }));
       }
+const name = normalize(body?.name);
+const avatar = normalize(body?.avatar);
+const calendar_id = normalize(body?.calendar_id);
+const pin = normalize(body?.pin);
+
+if (!name) return cors(...400);
+
+if (pin && !/^\d{4,8}$/.test(pin)) return cors(...400);
+
+// if calendar_id is set, verify it belongs to the parent
+if (calendar_id) {
+  const cal = await env.DB.prepare(
+    "SELECT id FROM calendars WHERE id = ? AND created_by = ?"
+  ).bind(calendar_id, user.sub).first();
+  if (!cal) return cors(...404);
+}
+
+let pin_salt=null, pin_hash=null, pin_iterations=null;
+if (pin) {
+  const hashed = await hashPasswordPBKDF2(pin, PBKDF2_ITERATIONS);
+  pin_salt = hashed.saltB64;
+  pin_hash = hashed.hashB64;
+  pin_iterations = hashed.iterations;
+}
+
+const now = Date.now();
+
+if (pin) {
+  await env.DB.prepare(
+    "UPDATE kids SET name=?, avatar=?, calendar_id=?, pin_salt=?, pin_hash=?, pin_iterations=?, updated_at=? WHERE id=? AND created_by=?"
+  ).bind(name, avatar||null, calendar_id||null, pin_salt, pin_hash, pin_iterations, now, id, user.sub).run();
+} else {
+  await env.DB.prepare(
+    "UPDATE kids SET name=?, avatar=?, calendar_id=?, updated_at=? WHERE id=? AND created_by=?"
+  ).bind(name, avatar||null, calendar_id||null, now, id, user.sub).run();
+}
 
       /* =======================
          EVENTS (protected)
@@ -278,23 +314,32 @@ export default {
         return cors(env, request, json({ ok: true, kids: results, build_id: BUILD_ID }));
       }
 
-      if (pathname === "/kids" && request.method === "POST") {
-        const user = await requireAuth(request, env);
-        const body = await safeJson(request);
+if (pathname === "/kid/login" && request.method === "POST") {
+  const body = await safeJson(request);
+  const kid_id = normalize(body?.kid_id);
+  const pin = normalize(body?.pin);
 
-        const name = normalize(body?.name);
-        const avatar = normalize(body?.avatar);
-        if (!name) return cors(env, request, json({ error: "name required", build_id: BUILD_ID }, 400));
+  if (!kid_id) return cors(...400);
+  if (!/^\d{4,8}$/.test(pin || "")) return cors(...400);
 
-        const id = crypto.randomUUID();
-        const now = Date.now();
+  const kidRec = await env.DB.prepare(
+    "SELECT id, name, created_by, pin_salt, pin_hash, pin_iterations, active FROM kids WHERE id = ?"
+  ).bind(kid_id).first();
 
-        await env.DB.prepare(
-          "INSERT INTO kids (id, name, avatar, created_by, created_at) VALUES (?, ?, ?, ?, ?)"
-        ).bind(id, name, avatar || null, user.sub, now).run();
+  if (!kidRec || kidRec.active === 0) return cors(...401);
+  if (!kidRec.pin_hash) return cors(...403);
 
-        return cors(env, request, json({ ok: true, id, build_id: BUILD_ID }));
-      }
+  const ok = await verifyPasswordPBKDF2(pin, kidRec.pin_salt, kidRec.pin_hash, kidRec.pin_iterations);
+  if (!ok) return cors(...401);
+
+  const jwt = await signJWT(env.JWT_SECRET, { typ:"kid", kid_id:kidRec.id, parent_id:kidRec.created_by });
+
+  const res = json({ ok:true, build_id: BUILD_ID });
+  const headers = new Headers(res.headers);
+  headers.set("Set-Cookie", buildKidSessionCookie(env, jwt, 60*60*24*14));
+  return cors(env, request, new Response(res.body, { status: res.status, headers }));
+}
+
 
       if (/^\/kids\/[^/]+$/.test(pathname) && request.method === "PATCH") {
         const user = await requireAuth(request, env);
@@ -477,6 +522,33 @@ export default {
           build_id: BUILD_ID,
         }));
       }
+if (pathname === "/kid/events" && request.method === "GET") {
+  const kidAuth = await requireKidAuth(request, env);
+
+  const start = parseInt(url.searchParams.get("start") || "", 10);
+  const end = parseInt(url.searchParams.get("end") || "", 10);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+    return cors(env, request, json({ error:"start/end required", build_id: BUILD_ID }, 400));
+  }
+
+  const kidRec = await env.DB.prepare(
+    "SELECT calendar_id FROM kids WHERE id=? AND created_by=? AND active=1"
+  ).bind(kidAuth.kid_id, kidAuth.parent_id).first();
+
+  const calendar_id = kidRec?.calendar_id || null;
+  if (!calendar_id) {
+    return cors(env, request, json({ ok:true, calendar_id:null, events:[], build_id: BUILD_ID }));
+  }
+
+  const { results } = await env.DB.prepare(
+    `SELECT id, calendar_id, title, location, start_ts, end_ts, all_day, color, icon, notes, recurrence
+     FROM events
+     WHERE created_by=? AND calendar_id=? AND start_ts < ? AND end_ts > ?
+     ORDER BY start_ts ASC`
+  ).bind(kidAuth.parent_id, calendar_id, end, start).all();
+
+  return cors(env, request, json({ ok:true, calendar_id, events:results, build_id: BUILD_ID }));
+}
 
       /* =======================
          Gift cards + rewards (protected)
@@ -631,10 +703,36 @@ function isAllowedOrigin(env, origin) {
   return false;
 }
 
-/* =======================
-   AUTH
-======================= */
 
+async function getKid(request, env) {
+  const cookie = request.headers.get("Cookie") || "";
+  const token = getCookie(cookie, "kid_session");
+  if (!token) return null;
+  const payload = await verifyJWT(env.JWT_SECRET, token);
+  if (!payload || payload.typ !== "kid") return null;
+  return { kid_id: payload.kid_id, parent_id: payload.parent_id };
+}
+
+async function requireKidAuth(request, env) {
+  const kid = await getKid(request, env);
+  if (!kid) throw new Error("unauthorized");
+  return kid;
+}
+
+function buildKidSessionCookie(env, value, maxAgeSeconds) {
+  const domain = normalize(env.COOKIE_DOMAIN);
+  const sameSite = normalize(env.COOKIE_SAMESITE) || "Lax";
+  const parts = [
+    `kid_session=${encodeURIComponent(value)}`,
+    "Path=/",
+    "HttpOnly",
+    "Secure",
+    `SameSite=${sameSite}`,
+    `Max-Age=${maxAgeSeconds}`,
+  ];
+  if (domain) parts.push(`Domain=${domain}`);
+  return parts.join("; ");
+}
 async function handleBootstrap(request, env) {
   const body = await safeJson(request);
 
