@@ -1,6 +1,7 @@
 const BUILD_ID = "updated kids/api include calendar";
 const PBKDF2_ITERATIONS = 100000;
-
+const cors = require('cors');
+app.use(cors()); // This allows the dashboard to read the JSON
 /* =======================
    Worker
 ======================= */
