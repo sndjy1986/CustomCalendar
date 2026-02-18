@@ -1,43 +1,43 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>SNDJY | Super Admin</title>
+    <meta charset="UTF-8"><title>SNDJY | Admin Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-slate-900 text-white p-6">
     <div class="max-w-6xl mx-auto">
         <header class="flex justify-between items-center mb-10 border-b border-slate-800 pb-5">
-            <h1 class="text-3xl font-bold text-blue-400">Super Admin Control</h1>
-            <button onclick="logout()" class="bg-slate-700 px-4 py-2 rounded hover:bg-red-600 transition">Logout</button>
+            <h1 class="text-3xl font-bold text-blue-400">Super Admin</h1>
+            <div class="flex gap-4">
+                <a href="/index.html" class="text-slate-400 hover:text-white mt-2">View Home</a>
+                <button onclick="logout()" class="bg-slate-700 px-4 py-2 rounded hover:bg-red-600 transition">Logout</button>
+            </div>
         </header>
 
-        <div class="grid lg:grid-cols-2 gap-8 mb-12">
+        <div class="grid lg:grid-cols-3 gap-8">
             <section class="bg-slate-800 p-6 rounded-xl border border-slate-700">
-                <h2 class="text-xl font-semibold mb-4">📅 Create New Calendar</h2>
-                <div class="space-y-4">
-                    <input type="text" id="calName" placeholder="Calendar Name" class="w-full p-2 rounded bg-slate-900 border border-slate-700 outline-none">
-                    <button onclick="createCalendar()" class="w-full bg-blue-600 py-2 rounded font-bold hover:bg-blue-500">Add Calendar</button>
-                </div>
+                <h2 class="text-xl font-bold mb-4">👤 Add Parent Account</h2>
+                <input type="email" id="uEmail" placeholder="Email" class="w-full p-2 mb-2 bg-slate-900 rounded border border-slate-700">
+                <input type="password" id="uPass" placeholder="Password" class="w-full p-2 mb-4 bg-slate-900 rounded border border-slate-700">
+                <button onclick="createUser()" class="w-full bg-purple-600 py-2 rounded font-bold">Create User</button>
             </section>
 
             <section class="bg-slate-800 p-6 rounded-xl border border-slate-700">
-                <h2 class="text-xl font-semibold mb-4">📌 Quick Event</h2>
-                <div class="space-y-4">
-                    <select id="eventCalList" class="w-full p-2 rounded bg-slate-900 border border-slate-700 text-sm">
-                        <option value="">Loading calendars...</option>
-                    </select>
-                    <input type="text" id="eventTitle" placeholder="Event Title" class="w-full p-2 rounded bg-slate-900 border border-slate-700">
-                    <input type="datetime-local" id="eventStart" class="w-full p-2 rounded bg-slate-900 border border-slate-700">
-                    <button onclick="addEvent()" class="w-full bg-green-600 py-2 rounded font-bold hover:bg-green-500">Save Event</button>
-                </div>
+                <h2 class="text-xl font-bold mb-4">📅 New Calendar</h2>
+                <input type="text" id="cName" placeholder="Calendar Name" class="w-full p-2 mb-4 bg-slate-900 rounded border border-slate-700">
+                <button onclick="createCalendar()" class="w-full bg-blue-600 py-2 rounded font-bold">Add Calendar</button>
+            </section>
+
+            <section class="bg-slate-800 p-6 rounded-xl border border-slate-700">
+                <h2 class="text-xl font-bold mb-4">📌 Add Event</h2>
+                <select id="eCal" class="w-full p-2 mb-2 bg-slate-900 border border-slate-700 rounded"></select>
+                <input type="text" id="eTitle" placeholder="Title" class="w-full p-2 mb-2 bg-slate-900 rounded border border-slate-700">
+                <input type="datetime-local" id="eStart" class="w-full p-2 mb-4 bg-slate-900 rounded border border-slate-700">
+                <button onclick="addEvent()" class="w-full bg-green-600 py-2 rounded font-bold">Save Event</button>
             </section>
         </div>
 
-        <h2 class="text-xl font-semibold mb-6 text-slate-400 border-b border-slate-800 pb-2">Active Calendars & Links</h2>
-        <div id="calendarGrid" class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <p class="text-slate-500 italic">Checking for calendars...</p>
-        </div>
+        <div id="calendarGrid" class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-12"></div>
     </div>
 
     <script>
@@ -46,82 +46,62 @@
         async function init() {
             const res = await fetch(`${API_BASE}/auth/me`, { credentials: 'include' });
             const data = await res.json();
-            if (!data.logged_in) window.location.href = "/login.html";
+            if (!data.logged_in || data.user.role !== 'super_admin') window.location.href = "/login.html";
             loadData();
         }
 
         async function loadData() {
-            console.log("Fetching calendars..."); // DEBUG LOG
-            try {
-                const res = await fetch(`${API_BASE}/calendars`, { credentials: 'include' });
-                const data = await res.json();
-                
-                const grid = document.getElementById('calendarGrid');
-                const dropdown = document.getElementById('eventCalList');
-                
-                if (data.ok && data.calendars.length > 0) {
-                    grid.innerHTML = '';
-                    dropdown.innerHTML = '<option value="">Select Calendar...</option>';
+            const res = await fetch(`${API_BASE}/calendars`, { credentials: 'include' });
+            const data = await res.json();
+            const grid = document.getElementById('calendarGrid');
+            const dropdown = document.getElementById('eCal');
+            grid.innerHTML = ''; dropdown.innerHTML = '';
+            
+            data.calendars.forEach(c => {
+                grid.innerHTML += `
+                    <div class="bg-slate-800 p-4 rounded-lg border-t-4 border-blue-500 shadow-lg">
+                        <p class="font-bold text-blue-300 mb-4">${c.name}</p>
+                        <a href="/calendar_view.html?calendar_id=${c.id}" class="block text-center text-xs bg-blue-600 py-2 rounded font-bold hover:bg-blue-500 mb-2">OPEN VIEW</a>
+                        <button onclick="navigator.clipboard.writeText('${c.id}'); alert('ID Copied');" class="w-full text-[10px] text-slate-500 underline">Copy Widget ID</button>
+                    </div>`;
+                dropdown.innerHTML += `<option value="${c.id}">${c.name}</option>`;
+            });
+        }
 
-                    data.calendars.forEach(cal => {
-                        // THIS IS THE LINK YOU NEED
-                        grid.innerHTML += `
-                            <div class="bg-slate-800 p-4 rounded-lg border-t-4 border-blue-500 shadow-lg">
-                                <p class="font-bold text-blue-300 mb-4">${cal.name}</p>
-                                <div class="flex flex-col gap-2">
-                                    <a href="/calendar_view.html?calendar_id=${cal.id}" class="block text-center text-xs bg-blue-600 py-2 rounded font-bold hover:bg-blue-500 transition">
-                                        OPEN FULL VIEW
-                                    </a>
-                                    <button onclick="copyLink('${cal.id}')" class="text-[10px] text-slate-500 hover:text-white underline">
-                                        Copy Widget ID
-                                    </button>
-                                </div>
-                            </div>
-                        `;
-                        dropdown.innerHTML += `<option value="${cal.id}">${cal.name}</option>`;
-                    });
-                } else {
-                    grid.innerHTML = '<p class="text-slate-500">No calendars found. Create one above!</p>';
-                    dropdown.innerHTML = '<option value="">No calendars available</option>';
-                }
-            } catch (err) {
-                console.error("LoadData Error:", err);
-                document.getElementById('calendarGrid').innerHTML = '<p class="text-red-500">Error connecting to API.</p>';
-            }
+        async function createUser() {
+            const email = document.getElementById('uEmail').value;
+            const password = document.getElementById('uPass').value;
+            await fetch(`${API_BASE}/users`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password }),
+                credentials: 'include'
+            });
+            alert("User Created!");
         }
 
         async function createCalendar() {
-            const name = document.getElementById('calName').value;
-            if(!name) return;
+            const name = document.getElementById('cName').value;
             await fetch(`${API_BASE}/calendars`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name }),
                 credentials: 'include'
             });
-            document.getElementById('calName').value = '';
             loadData();
         }
 
         async function addEvent() {
-            const calendar_id = document.getElementById('eventCalList').value;
-            const title = document.getElementById('eventTitle').value;
-            const start_ts = new Date(document.getElementById('eventStart').value).getTime();
-            if(!calendar_id || !title || isNaN(start_ts)) return alert("Fill all fields");
-
-            const res = await fetch(`${API_BASE}/events`, {
+            const calendar_id = document.getElementById('eCal').value;
+            const title = document.getElementById('eTitle').value;
+            const start_ts = new Date(document.getElementById('eStart').value).getTime();
+            await fetch(`${API_BASE}/events`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ calendar_id, title, start_ts }),
                 credentials: 'include'
             });
-            const data = await res.json();
-            if(data.ok) { alert("Saved!"); document.getElementById('eventTitle').value = ''; }
-        }
-
-        function copyLink(id) {
-            navigator.clipboard.writeText(id);
-            alert("ID Copied!");
+            alert("Saved!");
         }
 
         function logout() {
