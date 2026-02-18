@@ -1,6 +1,8 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SNDJY Calendar | Redirecting...</title>
     <script>
         const API_BASE = "https://api.cal.sndjy.us";
@@ -12,7 +14,7 @@
                 const data = await res.json();
 
                 if (data.logged_in) {
-                    // You are Joseph/Admin, go to the dashboard
+                    // Logged in as Joseph/Admin, go to the dashboard
                     window.location.href = "/admin.html";
                 } else {
                     // No session found, go to login
@@ -20,13 +22,20 @@
                 }
             } catch (err) {
                 console.error("Auth check failed", err);
+                // Fallback to login if API is unreachable
                 window.location.href = "/login.html";
             }
         }
-        checkSession();
+        window.onload = checkSession;
     </script>
 </head>
-<body style="background: #0f172a; color: white; display: flex; align-items: center; justify-content: center; height: 100vh; font-family: sans-serif;">
-    <p>Loading your calendar...</p>
+<body style="background: #0f172a; color: white; display: flex; align-items: center; justify-content: center; height: 100vh; font-family: sans-serif; margin: 0;">
+    <div style="text-align: center;">
+        <div style="border: 4px solid #3b82f6; border-top: 4px solid transparent; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 0 auto 20px;"></div>
+        <p style="font-size: 1.1rem; letter-spacing: 0.05em;">Loading your calendar...</p>
+    </div>
+    <style>
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
 </body>
 </html>
