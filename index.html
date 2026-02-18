@@ -7,44 +7,69 @@
 <body class="bg-slate-900 text-white p-6">
     <div class="max-w-4xl mx-auto">
         <header class="flex justify-between items-center mb-10">
-            <h1 class="text-3xl font-bold text-blue-400">My Calendars</h1>
-            <div id="navLinks" class="flex gap-4 items-center">
-                <button onclick="logout()" class="text-slate-400 hover:text-red-400 text-sm">Logout</button>
+            <h1 class="text-3xl font-bold text-blue-400">Family Hub</h1>
+            <div id="navLinks" class="flex gap-4">
+                <button onclick="logout()" class="text-slate-500 hover:text-red-400">Logout</button>
             </div>
         </header>
 
         <div id="calGrid" class="grid gap-6 sm:grid-cols-2">
-            </div>
+            <p class="text-slate-500 italic">Checking authorization...</p>
+        </div>
     </div>
 
     <script>
         const API_BASE = "https://api.cal.sndjy.us";
-        async function init() {
-            const res = await fetch(`${API_BASE}/auth/me`, { credentials: 'include' });
-            const data = await res.json();
-            if (!data.logged_in) window.location.href = "/login.html";
 
-            if (data.user.role === 'super_admin') {
-                document.getElementById('navLinks').insertAdjacentHTML('afterbegin', '<a href="/admin.html" class="bg-blue-600 px-4 py-2 rounded font-bold text-sm">Admin Panel</a>');
+        async function init() {
+            try {
+                const res = await fetch(`${API_BASE}/auth/me`, { credentials: 'include' });
+                const data = await res.json();
+
+                if (!data.logged_in) {
+                    window.location.href = "/login.html";
+                    return;
+                }
+
+                // If user is super_admin, show the admin link
+                if (data.user.role === 'super_admin') {
+                    document.getElementById('navLinks').insertAdjacentHTML('afterbegin', 
+                        '<a href="/admin.html" class="bg-blue-600 px-4 py-2 rounded font-bold text-sm">Admin Dashboard</a>'
+                    );
+                }
+
+                loadCalendars();
+            } catch (err) {
+                console.error(err);
+                window.location.href = "/login.html";
+            }
+        }
+
+        async function loadCalendars() {
+            const res = await fetch(`${API_BASE}/calendars`, { credentials: 'include' });
+            const data = await res.json();
+            const grid = document.getElementById('calGrid');
+            grid.innerHTML = '';
+
+            if (data.calendars.length === 0) {
+                grid.innerHTML = '<p class="text-slate-500">No calendars shared with you yet.</p>';
+                return;
             }
 
-            const calRes = await fetch(`${API_BASE}/calendars`, { credentials: 'include' });
-            const calData = await calRes.json();
-            const grid = document.getElementById('calGrid');
-            if(calData.calendars.length === 0) grid.innerHTML = "<p class='text-slate-500'>No calendars assigned to you.</p>";
-            
-            calData.calendars.forEach(c => {
+            data.calendars.forEach(c => {
                 grid.innerHTML += `
-                    <a href="/calendar_view.html?calendar_id=${c.id}" class="block p-8 bg-slate-800 rounded-2xl border-l-8 border-blue-500 hover:scale-105 transition-transform shadow-xl">
-                        <h2 class="font-bold text-xl mb-1">${c.name}</h2>
-                        <p class="text-slate-400 text-sm">Click to view schedule</p>
+                    <a href="/calendar_view.html?calendar_id=${c.id}" class="block p-8 bg-slate-800 rounded-2xl border-l-8 border-blue-500 hover:bg-slate-700 transition shadow-xl">
+                        <h2 class="font-bold text-xl">${c.name}</h2>
+                        <p class="text-slate-400 text-sm mt-1">Open schedule →</p>
                     </a>`;
             });
         }
+
         function logout() {
             document.cookie = "session=; Max-Age=0; path=/; domain=.sndjy.us";
             window.location.href = "/login.html";
         }
+
         init();
     </script>
 </body>
