@@ -1,45 +1,51 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SNDJY Calendar | Redirecting...</title>
+    <meta charset="UTF-8"><title>SNDJY | Home</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-white p-6">
+    <div class="max-w-4xl mx-auto">
+        <header class="flex justify-between items-center mb-10">
+            <h1 class="text-3xl font-bold text-blue-400">My Calendars</h1>
+            <div id="navLinks" class="flex gap-4 items-center">
+                <button onclick="logout()" class="text-slate-400 hover:text-red-400 text-sm">Logout</button>
+            </div>
+        </header>
+
+        <div id="calGrid" class="grid gap-6 sm:grid-cols-2">
+            </div>
+    </div>
+
     <script>
         const API_BASE = "https://api.cal.sndjy.us";
+        async function init() {
+            const res = await fetch(`${API_BASE}/auth/me`, { credentials: 'include' });
+            const data = await res.json();
+            if (!data.logged_in) window.location.href = "/login.html";
 
-        async function checkSession() {
-            try {
-                // We MUST include credentials to send the cross-subdomain cookie
-                const res = await fetch(`${API_BASE}/auth/me`, { 
-                    credentials: 'include' 
-                });
-                const data = await res.json();
-
-                if (data.logged_in) {
-                    // Session is valid, proceed to the dashboard
-                    window.location.href = "/admin.html";
-                } else {
-                    // No session found or expired, go to login
-                    window.location.href = "/login.html";
-                }
-            } catch (err) {
-                console.error("Auth check failed:", err);
-                // If the API is down or CORS fails, safe fallback is login
-                window.location.href = "/login.html";
+            if (data.user.role === 'super_admin') {
+                document.getElementById('navLinks').insertAdjacentHTML('afterbegin', '<a href="/admin.html" class="bg-blue-600 px-4 py-2 rounded font-bold text-sm">Admin Panel</a>');
             }
-        }
 
-        // Run the check as soon as the script loads
-        checkSession();
+            const calRes = await fetch(`${API_BASE}/calendars`, { credentials: 'include' });
+            const calData = await calRes.json();
+            const grid = document.getElementById('calGrid');
+            if(calData.calendars.length === 0) grid.innerHTML = "<p class='text-slate-500'>No calendars assigned to you.</p>";
+            
+            calData.calendars.forEach(c => {
+                grid.innerHTML += `
+                    <a href="/calendar_view.html?calendar_id=${c.id}" class="block p-8 bg-slate-800 rounded-2xl border-l-8 border-blue-500 hover:scale-105 transition-transform shadow-xl">
+                        <h2 class="font-bold text-xl mb-1">${c.name}</h2>
+                        <p class="text-slate-400 text-sm">Click to view schedule</p>
+                    </a>`;
+            });
+        }
+        function logout() {
+            document.cookie = "session=; Max-Age=0; path=/; domain=.sndjy.us";
+            window.location.href = "/login.html";
+        }
+        init();
     </script>
-</head>
-<body style="background: #0f172a; color: white; display: flex; align-items: center; justify-content: center; height: 100vh; font-family: sans-serif; margin: 0;">
-    <div style="text-align: center;">
-        <div style="border: 4px solid #3b82f6; border-top: 4px solid transparent; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 0 auto 20px;"></div>
-        <p style="font-size: 1.1rem; letter-spacing: 0.05em; color: #94a3b8;">Authenticating session...</p>
-    </div>
-    <style>
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-    </style>
 </body>
 </html>
