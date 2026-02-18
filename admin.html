@@ -6,32 +6,27 @@
 </head>
 <body class="bg-slate-900 text-white p-6">
     <div class="max-w-6xl mx-auto">
-        <header class="flex justify-between items-center mb-10 border-b border-slate-800 pb-5">
-            <h1 class="text-3xl font-bold text-blue-400">System Admin</h1>
-            <a href="/index.html" class="text-slate-400 hover:text-white">Back to Home</a>
+        <header class="flex justify-between items-center mb-8 border-b border-slate-800 pb-4">
+            <h1 class="text-2xl font-bold text-blue-400">System Permissions</h1>
+            <a href="/index.html" class="text-slate-400">Home</a>
         </header>
 
-        <div class="grid lg:grid-cols-2 gap-8 mb-12">
+        <div class="grid lg:grid-cols-2 gap-8">
             <section class="bg-slate-800 p-6 rounded-xl border border-slate-700">
-                <h2 class="text-xl font-bold mb-4">👤 Create Parent Account</h2>
+                <h2 class="text-xl font-bold mb-4 text-purple-400">Link User to Calendar</h2>
                 <div class="space-y-4">
-                    <input type="email" id="uEmail" placeholder="New User Email" class="w-full p-2 bg-slate-900 rounded border border-slate-700">
-                    <input type="password" id="uPass" placeholder="Set Password" class="w-full p-2 bg-slate-900 rounded border border-slate-700">
-                    <button onclick="createUser()" class="w-full bg-purple-600 py-2 rounded font-bold hover:bg-purple-500">Create Account</button>
+                    <input type="email" id="shareEmail" placeholder="User Email (e.g. brittneymalynn@yahoo.com)" class="w-full p-2 bg-slate-900 rounded border border-slate-700">
+                    <select id="shareCal" class="w-full p-2 bg-slate-900 rounded border border-slate-700"></select>
+                    <button onclick="assignPermission()" class="w-full bg-purple-600 py-2 rounded font-bold">Grant Access</button>
                 </div>
             </section>
 
             <section class="bg-slate-800 p-6 rounded-xl border border-slate-700">
-                <h2 class="text-xl font-bold mb-4">📅 New Calendar</h2>
-                <div class="space-y-4">
-                    <input type="text" id="cName" placeholder="Calendar Name" class="w-full p-2 bg-slate-900 rounded border border-slate-700">
-                    <button onclick="createCalendar()" class="w-full bg-blue-600 py-2 rounded font-bold hover:bg-blue-500">Add Calendar</button>
-                </div>
+                <h2 class="text-xl font-bold mb-4">New Calendar</h2>
+                <input type="text" id="cName" placeholder="Calendar Name" class="w-full p-2 mb-4 bg-slate-900 rounded border border-slate-700">
+                <button onclick="createCalendar()" class="w-full bg-blue-600 py-2 rounded font-bold">Create</button>
             </section>
         </div>
-
-        <h2 class="text-xl font-bold mb-4 text-slate-500">Existing System Calendars</h2>
-        <div id="adminGrid" class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4"></div>
     </div>
 
     <script>
@@ -41,55 +36,38 @@
             const res = await fetch(`${API_BASE}/auth/me`, { credentials: 'include' });
             const data = await res.json();
             if (!data.logged_in || data.user.role !== 'super_admin') window.location.href = "/login.html";
-            loadAdminData();
+            loadCals();
         }
 
-        async function loadAdminData() {
+        async function loadCals() {
             const res = await fetch(`${API_BASE}/calendars`, { credentials: 'include' });
             const data = await res.json();
-            const grid = document.getElementById('adminGrid');
-            grid.innerHTML = '';
-            
-            data.calendars.forEach(c => {
-                grid.innerHTML += `
-                    <div class="bg-slate-800 p-4 rounded-lg border-t-4 border-blue-500 shadow-lg">
-                        <p class="font-bold text-blue-300 mb-4">${c.name}</p>
-                        <a href="/calendar_view.html?calendar_id=${c.id}" class="block text-center text-xs bg-slate-700 py-2 rounded mb-2">Manage Events</a>
-                        <button onclick="navigator.clipboard.writeText('${c.id}'); alert('Copied!');" class="w-full text-[10px] text-slate-500">Copy ID</button>
-                    </div>`;
-            });
+            const dropdown = document.getElementById('shareCal');
+            dropdown.innerHTML = data.calendars.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
         }
 
-        async function createUser() {
-            const email = document.getElementById('uEmail').value;
-            const password = document.getElementById('uPass').value;
-            if(!email || !password) return alert("Fill all fields");
-            const res = await fetch(`${API_BASE}/users`, {
+        async function assignPermission() {
+            const user_email = document.getElementById('shareEmail').value;
+            const calendar_id = document.getElementById('shareCal').value;
+            const res = await fetch(`${API_BASE}/permissions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password }),
+                body: JSON.stringify({ user_email, calendar_id }),
                 credentials: 'include'
             });
-            if((await res.json()).ok) {
-                alert("Account created for " + email);
-                document.getElementById('uEmail').value = '';
-                document.getElementById('uPass').value = '';
-            }
+            if((await res.json()).ok) alert("Access Granted!");
         }
 
         async function createCalendar() {
             const name = document.getElementById('cName').value;
-            if(!name) return;
             await fetch(`${API_BASE}/calendars`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name }),
                 credentials: 'include'
             });
-            document.getElementById('cName').value = '';
-            loadAdminData();
+            loadCals();
         }
-
         init();
     </script>
 </body>
