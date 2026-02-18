@@ -15,19 +15,40 @@
     <div class="max-w-6xl mx-auto">
         <header class="flex justify-between items-center mb-8">
             <h1 id="calTitle" class="text-3xl font-bold text-blue-400">Calendar</h1>
-            <a href="/admin.html" class="bg-slate-800 px-4 py-2 rounded text-sm hover:bg-slate-700 transition">Admin Dashboard</a>
+            <div class="flex gap-4">
+                <a href="/index.html" class="bg-slate-800 px-4 py-2 rounded text-sm hover:bg-slate-700 transition">Home</a>
+                <a href="/admin.html" id="adminLink" class="hidden bg-blue-600 px-4 py-2 rounded text-sm hover:bg-blue-500 transition">Admin Dashboard</a>
+            </div>
         </header>
-        <div id="calendar"></div>
+
+        <div id="calendar" class="mb-12"></div>
+
+        <h2 class="text-xl font-bold mb-4 text-slate-400">Manage Events</h2>
+        <div id="eventList" class="grid gap-2">
+            </div>
     </div>
 
     <script>
         const API_BASE = "https://api.cal.sndjy.us";
         const params = new URLSearchParams(window.location.search);
         const calId = params.get('calendar_id');
+        let calendar;
 
-        document.addEventListener('DOMContentLoaded', async () => {
+        async function init() {
+            // Check if Super Admin to show the admin link
+            const authRes = await fetch(`${API_BASE}/auth/me`, { credentials: 'include' });
+            const authData = await authRes.json();
+            if (authData.logged_in && authData.user.role === 'super_admin') {
+                document.getElementById('adminLink').classList.remove('hidden');
+            }
+
+            renderCalendar();
+            loadEventList();
+        }
+
+        function renderCalendar() {
             const calendarEl = document.getElementById('calendar');
-            const calendar = new FullCalendar.Calendar(calendarEl, {
+            calendar = new FullCalendar.Calendar(calendarEl, {
                 initialView: 'dayGridMonth',
                 events: async (info, success, failure) => {
                     try {
@@ -42,7 +63,52 @@
                 }
             });
             calendar.render();
-        });
+        }
+
+        async function loadEventList() {
+            const res = await fetch(`${API_BASE}/events?calendar_id=${calId}&all=true`, { credentials: 'include' });
+            const data = await res.json();
+            const list = document.getElementById('eventList');
+            list.innerHTML = '';
+
+            if (data.events.length === 0) {
+                list.innerHTML = '<p class="text-slate-500 italic">No events found.</p>';
+                return;
+            }
+
+            data.events.forEach(e => {
+                const date = new Date(e.start_ts).toLocaleString();
+                list.innerHTML += `
+                    <div class="flex justify-between items-center bg-slate-800 p-3 rounded border border-slate-700">
+                        <div>
+                            <p class="font-bold">${e.title}</p>
+                            <p class="text-xs text-slate-400">${date}</p>
+                        </div>
+                        <button onclick="deleteEvent('${e.id}')" class="text-xs bg-red-900/30 text-red-400 border border-red-900/50 px-3 py-1 rounded hover:bg-red-600 hover:text-white transition">
+                            Delete
+                        </button>
+                    </div>`;
+            });
+        }
+
+        async function deleteEvent(id) {
+            if (!confirm("Are you sure you want to delete this event?")) return;
+            
+            const res = await fetch(`${API_BASE}/events/${id}`, { 
+                method: 'DELETE', 
+                credentials: 'include' 
+            });
+            const data = await res.json();
+            
+            if (data.ok) {
+                calendar.refetchEvents(); // Refresh the grid
+                loadEventList();          // Refresh the list
+            } else {
+                alert("Error: " + data.error);
+            }
+        }
+
+        init();
     </script>
 </body>
 </html>
