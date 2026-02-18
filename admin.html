@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SNDJY | Admin Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-white p-6">
+    <div class="max-w-4xl mx-auto">
+        <header class="flex justify-between items-center mb-10">
+            <h1 class="text-3xl font-bold text-blue-400">Calendar Management</h1>
+            <button onclick="logout()" class="text-sm bg-slate-700 px-4 py-2 rounded hover:bg-red-600 transition">Logout</button>
+        </header>
+
+        <div class="grid md:grid-cols-2 gap-8">
+            <section class="bg-slate-800 p-6 rounded-xl border border-slate-700">
+                <h2 class="text-xl font-semibold mb-4">Create New Calendar</h2>
+                <div class="space-y-4">
+                    <input type="text" id="calName" placeholder="Calendar Name (e.g., Joey's School)" class="w-full p-2 rounded bg-slate-900 border border-slate-700">
+                    <input type="color" id="calColor" value="#3b82f6" class="w-full h-10 rounded bg-slate-900 border border-slate-700 cursor-pointer">
+                    <button onclick="createCalendar()" class="w-full bg-blue-600 py-2 rounded font-bold hover:bg-blue-500 transition">Add Calendar</button>
+                </div>
+            </section>
+
+            <section class="bg-slate-800 p-6 rounded-xl border border-slate-700">
+                <h2 class="text-xl font-semibold mb-4">Add Event</h2>
+                <div class="space-y-4">
+                    <select id="eventCalList" class="w-full p-2 rounded bg-slate-900 border border-slate-700">
+                        <option value="">Select Calendar...</option>
+                    </select>
+                    <input type="text" id="eventTitle" placeholder="Event Title" class="w-full p-2 rounded bg-slate-900 border border-slate-700">
+                    <input type="datetime-local" id="eventStart" class="w-full p-2 rounded bg-slate-900 border border-slate-700">
+                    <button onclick="addEvent()" class="w-full bg-green-600 py-2 rounded font-bold hover:bg-green-500 transition">Save Event</button>
+                </div>
+            </section>
+        </div>
+
+        <div class="mt-10">
+            <h2 class="text-xl font-semibold mb-4 text-slate-400">Your Active Calendars</h2>
+            <div id="calendarList" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = "https://api.cal.sndjy.us";
+
+        // 1. Fetch existing calendars on load
+        async function loadData() {
+            const res = await fetch(`${API_BASE}/calendars`, { credentials: 'include' });
+            const data = await res.json();
+            
+            if (data.ok) {
+                const list = document.getElementById('calendarList');
+                const dropdown = document.getElementById('eventCalList');
+                list.innerHTML = '';
+                dropdown.innerHTML = '<option value="">Select Calendar...</option>';
+
+                data.calendars.forEach(cal => {
+                    // Update UI List
+                    list.innerHTML += `
+                        <div class="bg-slate-800 p-4 rounded-lg border-l-4" style="border-color: ${cal.color}">
+                            <p class="font-bold">${cal.name}</p>
+                            <p class="text-xs text-slate-500">ID: ${cal.id}</p>
+                        </div>
+                    `;
+                    // Update Dropdown
+                    dropdown.innerHTML += `<option value="${cal.id}">${cal.name}</option>`;
+                });
+            } else if (data.error === "unauthorized") {
+                window.location.href = "/login.html";
+            }
+        }
+
+        // 2. Create Calendar
+        async function createCalendar() {
+            const name = document.getElementById('calName').value;
+            const color = document.getElementById('calColor').value;
+
+            const res = await fetch(`${API_BASE}/calendars`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, color }),
+                credentials: 'include'
+            });
+
+            if (res.ok) {
+                document.getElementById('calName').value = '';
+                loadData();
+            }
+        }
+
+        // 3. Add Event
+        async function addEvent() {
+            const calendar_id = document.getElementById('eventCalList').value;
+            const title = document.getElementById('eventTitle').value;
+            const start_ts = new Date(document.getElementById('eventStart').value).getTime();
+
+            const res = await fetch(`${API_BASE}/events`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ calendar_id, title, start_ts, end_ts: start_ts + 3600000 }),
+                credentials: 'include'
+            });
+
+            if (res.ok) {
+                alert("Event added!");
+                document.getElementById('eventTitle').value = '';
+            }
+        }
+
+        loadData();
+    </script>
+</body>
+</html>
