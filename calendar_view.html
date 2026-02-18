@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SNDJY | Full Calendar</title>
+    <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js'></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root { --fc-border-color: #334155; }
+        .fc { background: #1e293b; padding: 20px; border-radius: 12px; color: white; }
+        .fc-toolbar-title { color: #60a5fa !important; }
+    </style>
+</head>
+<body class="bg-slate-900 text-white p-6">
+    <div class="max-w-6xl mx-auto">
+        <header class="flex justify-between items-center mb-8">
+            <h1 id="calTitle" class="text-3xl font-bold text-blue-400">Calendar</h1>
+            <a href="/admin.html" class="bg-slate-800 px-4 py-2 rounded text-sm hover:bg-slate-700 transition">Admin Dashboard</a>
+        </header>
+        <div id="calendar"></div>
+    </div>
+
+    <script>
+        const API_BASE = "https://api.cal.sndjy.us";
+        const params = new URLSearchParams(window.location.search);
+        const calId = params.get('calendar_id');
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            const calendarEl = document.getElementById('calendar');
+            const calendar = new FullCalendar.Calendar(calendarEl, {
+                initialView: 'dayGridMonth',
+                events: async (info, success, failure) => {
+                    try {
+                        const res = await fetch(`${API_BASE}/events?calendar_id=${calId}&all=true`, { credentials: 'include' });
+                        const data = await res.json();
+                        success(data.events.map(e => ({
+                            title: e.title,
+                            start: new Date(e.start_ts).toISOString(),
+                            color: '#3b82f6'
+                        })));
+                    } catch (err) { failure(err); }
+                }
+            });
+            calendar.render();
+        });
+    </script>
+</body>
+</html>
