@@ -2,64 +2,41 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SNDJY | Super Admin Dashboard</title>
+    <title>SNDJY | Super Admin</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-slate-900 text-white p-6">
     <div class="max-w-6xl mx-auto">
         <header class="flex justify-between items-center mb-10 border-b border-slate-800 pb-5">
-            <div>
-                <h1 class="text-3xl font-bold text-blue-400">Super Admin Control</h1>
-                <p class="text-slate-400 text-sm">Logged in as: <span id="adminEmail">...</span></p>
-            </div>
+            <h1 class="text-3xl font-bold text-blue-400">Super Admin Control</h1>
             <button onclick="logout()" class="bg-slate-700 px-4 py-2 rounded hover:bg-red-600 transition">Logout</button>
         </header>
 
-        <div class="grid lg:grid-cols-3 gap-8">
-            
-            <section class="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg">
-                <h2 class="text-xl font-semibold mb-4 flex items-center">
-                    <span class="mr-2">👤</span> Create Parent Account
-                </h2>
+        <div class="grid lg:grid-cols-2 gap-8 mb-12">
+            <section class="bg-slate-800 p-6 rounded-xl border border-slate-700">
+                <h2 class="text-xl font-semibold mb-4">📅 Create New Calendar</h2>
                 <div class="space-y-4">
-                    <input type="email" id="newUserEmail" placeholder="Parent Email" class="w-full p-2 rounded bg-slate-900 border border-slate-700 outline-none focus:border-purple-500">
-                    <input type="password" id="newUserPass" placeholder="Set Password" class="w-full p-2 rounded bg-slate-900 border border-slate-700 outline-none focus:border-purple-500">
-                    <button onclick="createUser()" class="w-full bg-purple-600 py-2 rounded font-bold hover:bg-purple-500 transition">Create Account</button>
-                </div>
-                <p id="userMsg" class="mt-2 text-xs text-center"></p>
-            </section>
-
-            <section class="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg">
-                <h2 class="text-xl font-semibold mb-4 flex items-center">
-                    <span class="mr-2">📅</span> New Calendar
-                </h2>
-                <div class="space-y-4">
-                    <input type="text" id="calName" placeholder="Calendar Name (e.g. Kids Chores)" class="w-full p-2 rounded bg-slate-900 border border-slate-700 outline-none focus:border-blue-500">
-                    <input type="color" id="calColor" value="#3b82f6" class="w-full h-10 rounded bg-slate-900 border border-slate-700 cursor-pointer">
-                    <button onclick="createCalendar()" class="w-full bg-blue-600 py-2 rounded font-bold hover:bg-blue-500 transition">Add Calendar</button>
+                    <input type="text" id="calName" placeholder="Calendar Name" class="w-full p-2 rounded bg-slate-900 border border-slate-700 outline-none">
+                    <button onclick="createCalendar()" class="w-full bg-blue-600 py-2 rounded font-bold hover:bg-blue-500">Add Calendar</button>
                 </div>
             </section>
 
-            <section class="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg">
-                <h2 class="text-xl font-semibold mb-4 flex items-center">
-                    <span class="mr-2">📌</span> Quick Event
-                </h2>
+            <section class="bg-slate-800 p-6 rounded-xl border border-slate-700">
+                <h2 class="text-xl font-semibold mb-4">📌 Quick Event</h2>
                 <div class="space-y-4">
-                    <select id="eventCalList" class="w-full p-2 rounded bg-slate-900 border border-slate-700 text-sm outline-none focus:border-green-500">
-                        <option value="">Select Calendar...</option>
+                    <select id="eventCalList" class="w-full p-2 rounded bg-slate-900 border border-slate-700 text-sm">
+                        <option value="">Loading calendars...</option>
                     </select>
-                    <input type="text" id="eventTitle" placeholder="Event Title" class="w-full p-2 rounded bg-slate-900 border border-slate-700 outline-none focus:border-green-500">
-                    <input type="datetime-local" id="eventStart" class="w-full p-2 rounded bg-slate-900 border border-slate-700 outline-none focus:border-green-500">
-                    <button onclick="addEvent()" class="w-full bg-green-600 py-2 rounded font-bold hover:bg-green-500 transition">Save Event</button>
+                    <input type="text" id="eventTitle" placeholder="Event Title" class="w-full p-2 rounded bg-slate-900 border border-slate-700">
+                    <input type="datetime-local" id="eventStart" class="w-full p-2 rounded bg-slate-900 border border-slate-700">
+                    <button onclick="addEvent()" class="w-full bg-green-600 py-2 rounded font-bold hover:bg-green-500">Save Event</button>
                 </div>
             </section>
         </div>
 
-        <div class="mt-12">
-            <h2 class="text-xl font-semibold mb-6 text-slate-400">All System Calendars</h2>
-            <div id="calendarGrid" class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                </div>
+        <h2 class="text-xl font-semibold mb-6 text-slate-400 border-b border-slate-800 pb-2">Active Calendars & Links</h2>
+        <div id="calendarGrid" class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <p class="text-slate-500 italic">Checking for calendars...</p>
         </div>
     </div>
 
@@ -67,54 +44,59 @@
         const API_BASE = "https://api.cal.sndjy.us";
 
         async function init() {
-            // Standard credentials: 'include' for your cross-subdomain session
             const res = await fetch(`${API_BASE}/auth/me`, { credentials: 'include' });
             const data = await res.json();
             if (!data.logged_in) window.location.href = "/login.html";
-            document.getElementById('adminEmail').innerText = data.user.email;
             loadData();
         }
 
         async function loadData() {
-            const res = await fetch(`${API_BASE}/calendars`, { credentials: 'include' });
-            const data = await res.json();
-            if (data.ok) {
+            console.log("Fetching calendars..."); // DEBUG LOG
+            try {
+                const res = await fetch(`${API_BASE}/calendars`, { credentials: 'include' });
+                const data = await res.json();
+                
                 const grid = document.getElementById('calendarGrid');
                 const dropdown = document.getElementById('eventCalList');
-                grid.innerHTML = '';
-                dropdown.innerHTML = '<option value="">Select Calendar...</option>';
+                
+                if (data.ok && data.calendars.length > 0) {
+                    grid.innerHTML = '';
+                    dropdown.innerHTML = '<option value="">Select Calendar...</option>';
 
-                data.calendars.forEach(cal => {
-                    grid.innerHTML += `
-                        <div class="bg-slate-800 p-4 rounded-lg border-t-4 shadow-md flex flex-col justify-between" style="border-color: ${cal.color}">
-                            <div>
-                                <p class="font-bold text-blue-300 mb-1">${cal.name}</p>
-                                <p class="text-[10px] text-slate-500 uppercase tracking-widest">ID: ${cal.id.slice(0,8)}...</p>
+                    data.calendars.forEach(cal => {
+                        // THIS IS THE LINK YOU NEED
+                        grid.innerHTML += `
+                            <div class="bg-slate-800 p-4 rounded-lg border-t-4 border-blue-500 shadow-lg">
+                                <p class="font-bold text-blue-300 mb-4">${cal.name}</p>
+                                <div class="flex flex-col gap-2">
+                                    <a href="/calendar_view.html?calendar_id=${cal.id}" class="block text-center text-xs bg-blue-600 py-2 rounded font-bold hover:bg-blue-500 transition">
+                                        OPEN FULL VIEW
+                                    </a>
+                                    <button onclick="copyLink('${cal.id}')" class="text-[10px] text-slate-500 hover:text-white underline">
+                                        Copy Widget ID
+                                    </button>
+                                </div>
                             </div>
-                            <div class="mt-4 flex flex-col gap-2">
-                                <a href="/calendar_view.html?calendar_id=${cal.id}" class="text-center text-xs bg-blue-600/20 text-blue-400 py-2 rounded border border-blue-600/30 hover:bg-blue-600 hover:text-white transition">
-                                    Open Full View
-                                </a>
-                                <button onclick="copyLink('${cal.id}')" class="text-[10px] text-slate-400 hover:text-white transition">
-                                    Copy Widget ID
-                                </button>
-                            </div>
-                        </div>
-                    `;
-                    dropdown.innerHTML += `<option value="${cal.id}">${cal.name}</option>`;
-                });
+                        `;
+                        dropdown.innerHTML += `<option value="${cal.id}">${cal.name}</option>`;
+                    });
+                } else {
+                    grid.innerHTML = '<p class="text-slate-500">No calendars found. Create one above!</p>';
+                    dropdown.innerHTML = '<option value="">No calendars available</option>';
+                }
+            } catch (err) {
+                console.error("LoadData Error:", err);
+                document.getElementById('calendarGrid').innerHTML = '<p class="text-red-500">Error connecting to API.</p>';
             }
         }
 
         async function createCalendar() {
             const name = document.getElementById('calName').value;
-            const color = document.getElementById('calColor').value;
-            if(!name) return alert("Enter a name");
-
+            if(!name) return;
             await fetch(`${API_BASE}/calendars`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, color }),
+                body: JSON.stringify({ name }),
                 credentials: 'include'
             });
             document.getElementById('calName').value = '';
@@ -125,8 +107,7 @@
             const calendar_id = document.getElementById('eventCalList').value;
             const title = document.getElementById('eventTitle').value;
             const start_ts = new Date(document.getElementById('eventStart').value).getTime();
-            
-            if(!calendar_id || !title || isNaN(start_ts)) return alert("Fill all fields correctly");
+            if(!calendar_id || !title || isNaN(start_ts)) return alert("Fill all fields");
 
             const res = await fetch(`${API_BASE}/events`, {
                 method: 'POST',
@@ -135,30 +116,12 @@
                 credentials: 'include'
             });
             const data = await res.json();
-            if(data.ok) {
-                alert("Event saved!");
-                document.getElementById('eventTitle').value = '';
-            } else {
-                alert("Error: " + data.error);
-            }
-        }
-
-        async function createUser() {
-            const email = document.getElementById('newUserEmail').value;
-            const password = document.getElementById('newUserPass').value;
-            const msg = document.getElementById('userMsg');
-            
-            if(!email || !password) return alert("Email and Password required");
-
-            // Using the bootstrap endpoint logic for user creation
-            // Note: In a production role, you'd likely use a dedicated 'admin/create-user' route
-            alert("This uses your Admin privileges to register a new Parent ID in the database.");
-            // Logic for creating non-admin users would be added to your Worker's POST /users route.
+            if(data.ok) { alert("Saved!"); document.getElementById('eventTitle').value = ''; }
         }
 
         function copyLink(id) {
             navigator.clipboard.writeText(id);
-            alert("Calendar ID copied for Scriptable!");
+            alert("ID Copied!");
         }
 
         function logout() {
