@@ -8,69 +8,53 @@
     <div class="max-w-6xl mx-auto">
         <header class="flex justify-between items-center mb-8 border-b border-slate-800 pb-4">
             <h1 class="text-2xl font-bold text-blue-400">Permissions Dashboard</h1>
-            <a href="/index.html" class="text-slate-400 hover:text-white">Home</a>
+            <a href="/index.html" class="text-slate-400">Home</a>
         </header>
-
         <div class="grid lg:grid-cols-2 gap-8 mb-12">
             <section class="bg-slate-800 p-6 rounded-xl border border-slate-700">
                 <h2 class="text-xl font-bold mb-4 text-purple-400">Assign Access</h2>
-                <div class="space-y-4">
-                    <input type="email" id="shareEmail" placeholder="User Email (e.g. kimberrachels@gmail.com)" class="w-full p-2 bg-slate-900 rounded border border-slate-700 outline-none focus:border-purple-500">
-                    <select id="shareCal" class="w-full p-2 bg-slate-900 rounded border border-slate-700 outline-none focus:border-purple-500"></select>
-                    <button onclick="assignPermission()" class="w-full bg-purple-600 py-2 rounded font-bold hover:bg-purple-500 transition">Grant Access</button>
-                </div>
+                <input type="email" id="shareEmail" placeholder="User Email" class="w-full p-2 mb-4 bg-slate-900 rounded border border-slate-700">
+                <select id="shareCal" class="w-full p-2 mb-4 bg-slate-900 rounded border border-slate-700"></select>
+                <button onclick="assignPermission()" class="w-full bg-purple-600 py-2 rounded font-bold">Grant Access</button>
             </section>
-
             <section class="bg-slate-800 p-6 rounded-xl border border-slate-700">
-                <h2 class="text-xl font-bold mb-4">New Calendar</h2>
-                <div class="space-y-4">
-                    <input type="text" id="cName" placeholder="Calendar Name" class="w-full p-2 bg-slate-900 rounded border border-slate-700">
-                    <button onclick="createCalendar()" class="w-full bg-blue-600 py-2 rounded font-bold">Create</button>
-                </div>
+                <h2 class="text-xl font-bold mb-4">Create New Calendar</h2>
+                <input type="text" id="cName" placeholder="Calendar Name" class="w-full p-2 mb-4 bg-slate-900 rounded border border-slate-700">
+                <button onclick="createCalendar()" class="w-full bg-blue-600 py-2 rounded font-bold">Create</button>
             </section>
         </div>
-        <div id="calendarGrid" class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4"></div>
+        <div id="adminGrid" class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4"></div>
     </div>
-
     <script>
         const API_BASE = "https://api.cal.sndjy.us";
-
         async function init() {
             const res = await fetch(`${API_BASE}/auth/me`, { credentials: 'include' });
             const data = await res.json();
             if (!data.logged_in || data.user.role !== 'super_admin') window.location.href = "/login.html";
             loadAdminData();
         }
-
         async function loadAdminData() {
             const res = await fetch(`${API_BASE}/calendars`, { credentials: 'include' });
             const data = await res.json();
-            const grid = document.getElementById('calendarGrid');
+            const grid = document.getElementById('adminGrid');
             const dropdown = document.getElementById('shareCal');
             grid.innerHTML = ''; dropdown.innerHTML = '';
-            
             data.calendars.forEach(c => {
-                grid.innerHTML += `
-                    <div class="bg-slate-800 p-4 rounded-lg border-t-4 border-blue-500">
-                        <p class="font-bold text-blue-300 mb-2">${c.name}</p>
-                        <p class="text-[10px] text-slate-500 truncate mb-4">${c.id}</p>
-                    </div>`;
+                grid.innerHTML += `<div class="bg-slate-800 p-4 rounded-lg border-t-4 border-blue-500"><p class="font-bold text-blue-300">${c.name}</p></div>`;
                 dropdown.innerHTML += `<option value="${c.id}">${c.name}</option>`;
             });
         }
-
         async function assignPermission() {
             const user_email = document.getElementById('shareEmail').value;
             const calendar_id = document.getElementById('shareCal').value;
-            const res = await fetch(`${API_BASE}/permissions`, {
+            await fetch(`${API_BASE}/permissions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ user_email, calendar_id }),
                 credentials: 'include'
             });
-            if((await res.json()).ok) alert("Permissions Updated!");
+            alert("Permissions Updated!");
         }
-
         async function createCalendar() {
             const name = document.getElementById('cName').value;
             await fetch(`${API_BASE}/calendars`, {
