@@ -1,43 +1,37 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8"><title>SNDJY | Admin Dashboard</title>
+    <meta charset="UTF-8"><title>SNDJY | Super Admin</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-slate-900 text-white p-6">
     <div class="max-w-6xl mx-auto">
         <header class="flex justify-between items-center mb-10 border-b border-slate-800 pb-5">
-            <h1 class="text-3xl font-bold text-blue-400">Super Admin</h1>
-            <div class="flex gap-4">
-                <a href="/index.html" class="text-slate-400 hover:text-white mt-2">View Home</a>
-                <button onclick="logout()" class="bg-slate-700 px-4 py-2 rounded hover:bg-red-600 transition">Logout</button>
-            </div>
+            <h1 class="text-3xl font-bold text-blue-400">System Admin</h1>
+            <a href="/index.html" class="text-slate-400 hover:text-white">Back to Home</a>
         </header>
 
-        <div class="grid lg:grid-cols-3 gap-8">
+        <div class="grid lg:grid-cols-2 gap-8 mb-12">
             <section class="bg-slate-800 p-6 rounded-xl border border-slate-700">
-                <h2 class="text-xl font-bold mb-4">👤 Add Parent Account</h2>
-                <input type="email" id="uEmail" placeholder="Email" class="w-full p-2 mb-2 bg-slate-900 rounded border border-slate-700">
-                <input type="password" id="uPass" placeholder="Password" class="w-full p-2 mb-4 bg-slate-900 rounded border border-slate-700">
-                <button onclick="createUser()" class="w-full bg-purple-600 py-2 rounded font-bold">Create User</button>
+                <h2 class="text-xl font-bold mb-4">👤 Create Parent Account</h2>
+                <div class="space-y-4">
+                    <input type="email" id="uEmail" placeholder="New User Email" class="w-full p-2 bg-slate-900 rounded border border-slate-700">
+                    <input type="password" id="uPass" placeholder="Set Password" class="w-full p-2 bg-slate-900 rounded border border-slate-700">
+                    <button onclick="createUser()" class="w-full bg-purple-600 py-2 rounded font-bold hover:bg-purple-500">Create Account</button>
+                </div>
             </section>
 
             <section class="bg-slate-800 p-6 rounded-xl border border-slate-700">
                 <h2 class="text-xl font-bold mb-4">📅 New Calendar</h2>
-                <input type="text" id="cName" placeholder="Calendar Name" class="w-full p-2 mb-4 bg-slate-900 rounded border border-slate-700">
-                <button onclick="createCalendar()" class="w-full bg-blue-600 py-2 rounded font-bold">Add Calendar</button>
-            </section>
-
-            <section class="bg-slate-800 p-6 rounded-xl border border-slate-700">
-                <h2 class="text-xl font-bold mb-4">📌 Add Event</h2>
-                <select id="eCal" class="w-full p-2 mb-2 bg-slate-900 border border-slate-700 rounded"></select>
-                <input type="text" id="eTitle" placeholder="Title" class="w-full p-2 mb-2 bg-slate-900 rounded border border-slate-700">
-                <input type="datetime-local" id="eStart" class="w-full p-2 mb-4 bg-slate-900 rounded border border-slate-700">
-                <button onclick="addEvent()" class="w-full bg-green-600 py-2 rounded font-bold">Save Event</button>
+                <div class="space-y-4">
+                    <input type="text" id="cName" placeholder="Calendar Name" class="w-full p-2 bg-slate-900 rounded border border-slate-700">
+                    <button onclick="createCalendar()" class="w-full bg-blue-600 py-2 rounded font-bold hover:bg-blue-500">Add Calendar</button>
+                </div>
             </section>
         </div>
 
-        <div id="calendarGrid" class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-12"></div>
+        <h2 class="text-xl font-bold mb-4 text-slate-500">Existing System Calendars</h2>
+        <div id="adminGrid" class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4"></div>
     </div>
 
     <script>
@@ -47,66 +41,53 @@
             const res = await fetch(`${API_BASE}/auth/me`, { credentials: 'include' });
             const data = await res.json();
             if (!data.logged_in || data.user.role !== 'super_admin') window.location.href = "/login.html";
-            loadData();
+            loadAdminData();
         }
 
-        async function loadData() {
+        async function loadAdminData() {
             const res = await fetch(`${API_BASE}/calendars`, { credentials: 'include' });
             const data = await res.json();
-            const grid = document.getElementById('calendarGrid');
-            const dropdown = document.getElementById('eCal');
-            grid.innerHTML = ''; dropdown.innerHTML = '';
+            const grid = document.getElementById('adminGrid');
+            grid.innerHTML = '';
             
             data.calendars.forEach(c => {
                 grid.innerHTML += `
                     <div class="bg-slate-800 p-4 rounded-lg border-t-4 border-blue-500 shadow-lg">
                         <p class="font-bold text-blue-300 mb-4">${c.name}</p>
-                        <a href="/calendar_view.html?calendar_id=${c.id}" class="block text-center text-xs bg-blue-600 py-2 rounded font-bold hover:bg-blue-500 mb-2">OPEN VIEW</a>
-                        <button onclick="navigator.clipboard.writeText('${c.id}'); alert('ID Copied');" class="w-full text-[10px] text-slate-500 underline">Copy Widget ID</button>
+                        <a href="/calendar_view.html?calendar_id=${c.id}" class="block text-center text-xs bg-slate-700 py-2 rounded mb-2">Manage Events</a>
+                        <button onclick="navigator.clipboard.writeText('${c.id}'); alert('Copied!');" class="w-full text-[10px] text-slate-500">Copy ID</button>
                     </div>`;
-                dropdown.innerHTML += `<option value="${c.id}">${c.name}</option>`;
             });
         }
 
         async function createUser() {
             const email = document.getElementById('uEmail').value;
             const password = document.getElementById('uPass').value;
-            await fetch(`${API_BASE}/users`, {
+            if(!email || !password) return alert("Fill all fields");
+            const res = await fetch(`${API_BASE}/users`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, password }),
                 credentials: 'include'
             });
-            alert("User Created!");
+            if((await res.json()).ok) {
+                alert("Account created for " + email);
+                document.getElementById('uEmail').value = '';
+                document.getElementById('uPass').value = '';
+            }
         }
 
         async function createCalendar() {
             const name = document.getElementById('cName').value;
+            if(!name) return;
             await fetch(`${API_BASE}/calendars`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name }),
                 credentials: 'include'
             });
-            loadData();
-        }
-
-        async function addEvent() {
-            const calendar_id = document.getElementById('eCal').value;
-            const title = document.getElementById('eTitle').value;
-            const start_ts = new Date(document.getElementById('eStart').value).getTime();
-            await fetch(`${API_BASE}/events`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ calendar_id, title, start_ts }),
-                credentials: 'include'
-            });
-            alert("Saved!");
-        }
-
-        function logout() {
-            document.cookie = "session=; Max-Age=0; path=/; domain=.sndjy.us";
-            window.location.href = "/login.html";
+            document.getElementById('cName').value = '';
+            loadAdminData();
         }
 
         init();
