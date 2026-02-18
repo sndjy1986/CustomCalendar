@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SNDJY | Calendar Login</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-white flex items-center justify-center h-screen">
+    <div class="bg-slate-800 p-8 rounded-2xl shadow-xl w-96 border border-slate-700">
+        <h1 class="text-2xl font-bold mb-6 text-center text-blue-400">Custom Calendar</h1>
+        
+        <div class="flex mb-6 bg-slate-700 rounded-lg p-1">
+            <button id="parentTab" onclick="switchTab('parent')" class="flex-1 py-2 rounded-md bg-blue-600">Admin</button>
+            <button id="kidTab" onclick="switchTab('kid')" class="flex-1 py-2 rounded-md">Child Login</button>
+        </div>
+
+        <form id="loginForm" onsubmit="handleLogin(event)">
+            <div id="emailField">
+                <label class="block text-sm font-medium mb-1">Email</label>
+                <input type="email" id="email" class="w-full p-2 mb-4 rounded bg-slate-900 border border-slate-700 focus:outline-none focus:border-blue-500">
+            </div>
+            
+            <label class="block text-sm font-medium mb-1" id="passLabel">Password</label>
+            <input type="password" id="password" class="w-full p-2 mb-6 rounded bg-slate-900 border border-slate-700 focus:outline-none focus:border-blue-500" placeholder="••••••••">
+            
+            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-500 py-2 rounded font-bold transition">Sign In</button>
+        </form>
+        <p id="message" class="mt-4 text-center text-sm text-red-400"></p>
+    </div>
+
+    <script>
+        let mode = 'parent';
+        const API_BASE = "https://api.cal.sndjy.us";
+
+        function switchTab(newMode) {
+            mode = newMode;
+            document.getElementById('emailField').style.display = mode === 'parent' ? 'block' : 'none';
+            document.getElementById('passLabel').innerText = mode === 'parent' ? 'Password' : 'Enter PIN';
+            document.getElementById('password').placeholder = mode === 'parent' ? '••••••••' : '4-8 Digits';
+            document.getElementById('parentTab').className = `flex-1 py-2 rounded-md ${mode === 'parent' ? 'bg-blue-600' : ''}`;
+            document.getElementById('kidTab').className = `flex-1 py-2 rounded-md ${mode === 'kid' ? 'bg-blue-600' : ''}`;
+        }
+
+        async function handleLogin(e) {
+            e.preventDefault();
+            const email = document.getElementById('email').value;
+            const secret = document.getElementById('password').value;
+            const endpoint = mode === 'parent' ? '/auth/login' : '/kid/login';
+            
+            const payload = mode === 'parent' 
+                ? { email, password: secret } 
+                : { kid_id: "KID_UUID_HERE", pin: secret }; // In a real app, you'd select the kid first
+
+            try {
+                const res = await fetch(API_BASE + endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    window.location.href = mode === 'parent' ? '/admin.html' : '/calendar.html';
+                } else {
+                    document.getElementById('message').innerText = data.error;
+                }
+            } catch (err) {
+                document.getElementById('message').innerText = "Server connection failed.";
+            }
+        }
+    </script>
+</body>
+</html>
