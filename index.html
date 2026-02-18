@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SNDJY Calendar | Redirecting...</title>
+    <script>
+        const API_BASE = "https://api.cal.sndjy.us";
+
+        async function checkSession() {
+            try {
+                // Check if the user has an active session cookie
+                const res = await fetch(`${API_BASE}/auth/me`, { credentials: 'include' });
+                const data = await res.json();
+
+                if (data.logged_in) {
+                    // You are Joseph/Admin, go to the dashboard
+                    window.location.href = "/admin.html";
+                } else {
+                    // No session found, go to login
+                    window.location.href = "/login.html";
+                }
+            } catch (err) {
+                console.error("Auth check failed", err);
+                window.location.href = "/login.html";
+            }
+        }
+        checkSession();
+    </script>
+</head>
+<body style="background: #0f172a; color: white; display: flex; align-items: center; justify-content: center; height: 100vh; font-family: sans-serif;">
+    <p>Loading your calendar...</p>
+</body>
+</html>
